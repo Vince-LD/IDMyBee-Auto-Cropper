@@ -12,34 +12,32 @@ use std::error;
 use num_derive::FromPrimitive;
 
 #[derive(FromPrimitive)]
-enum FOVMode {
+enum ZoomMode {
     Large = 0,
     Medium = 1,
     Zoom = 2,
 }
 
-fn parse_markers(points: &Vector<VectorOfPoint2f>, marker_ids : &Vector<i32>, fov : &FOVMode) -> Result<VectorOfPoint2f, opencv::Error> {
+fn parse_markers(points: &Vector<VectorOfPoint2f>, marker_ids : &Vector<i32>, zoom : &ZoomMode) -> Result<VectorOfPoint2f, opencv::Error> {
     // Crée un nouveau vecteur réorganisé en suivant les indices du vecteur marker_ids
 
     let mut reordered_points: VectorOfPoint2f = VectorOfPoint2f::from_elem(Point2f::new(0., 0.), 4);
     for (i, new_idx) in marker_ids.iter().enumerate() { 
-        let point = match fov {
-            FOVMode::Large => points.get(i)?.get(new_idx as usize)?,
-            FOVMode::Medium => {
+        let point = match zoom {
+            ZoomMode::Large => points.get(i)?.get(new_idx as usize)?,
+            ZoomMode::Medium => {
                 let marker_corners = points.get(i)?;
                 match new_idx {
                     0 | 3 => (marker_corners.get(0)? + marker_corners.get(3)?) / 2.,
-                    1 | 2 | _ => (marker_corners.get(1)? + marker_corners.get(2)?) / 2.
+                    1 | 2 | _ => marker_corners.iter().fold(Point2f::default(), |p_coor, p| p_coor + p) / 4.
                 }
             },
-            FOVMode::Zoom => points.get(i)?.get(
+            ZoomMode::Zoom => points.get(i)?.get(
                 match new_idx {
                     0 | 1 => 3,
-                    2 | 3 | _ => 0, // Cannot be called => only 4 corners
+                    2 | 3 | _ => 0,
                 } as usize)?
         };
-        // let point_vec = points.get(i)?;
-        // let point = point_vec.get(new_idx as usize)?;
         reordered_points.set(new_idx as usize, point)?;
     }
     Ok(reordered_points)
@@ -109,11 +107,11 @@ fn main() -> Result<(), Box<dyn error::Error>>{
     let mut output_paths: Vec<String> = vec![];
     let mut out_dim = vec![600, 400];
     let mut show = false;
-    let mut fov_vec : Vec<u32> = vec![0];
+    let mut zoom_vec : Vec<u32> = vec![0];
 
     {
         let mut parser = ArgumentParser::new();
-        parser.set_description("This tools is used to preprcocess photos taken with the Id My Bee protocol. It automatically crop and correct the photo angle.");
+        parser.set_description("This tools is used to preprcocess photos taken with the ID My Bee protocol. It automatically crop and correct the photo angle.");
         
         // parser.refer(&mut verbose)
         //     .add_option(&["-v", "--verbose"], StoreTrue,
@@ -126,19 +124,19 @@ fn main() -> Result<(), Box<dyn error::Error>>{
         
         parser.refer(&mut output_paths)
             .add_option(&["-o", "--img_out"], List,
-            "Output preprocessed image path.");
+            "Output preprocessed image path.  /!\\ The number of output files given must be 0 or the same as the number of zoom levels. If None given, the default output file will follow this pattern: '[input_folder]/[base input filename]_preproc_z[zoom level].[input file extension]'");
 
         parser.refer(&mut out_dim)
             .add_option(&["-d", "--out_dim"], List,
             "Output image dimensions width height (e.g. default is '-d 600 400').");
 
-        parser.refer(&mut fov_vec)
+        parser.refer(&mut zoom_vec)
             .add_option(&["-z", "--zoom"], List,
             "The zoom to apply. Three possible values are 0 (large), 1 (medium) and 2 (zoom). Multiple zoom values can be given. Default is 1 (medium).");
         
         parser.refer(&mut show)
             .add_option(&["-s", "--show"], StoreTrue,
-            "Show the image in a window instead of saving it. Once the windows is open, press 'q' to quit.");
+            "Show the image in a window instead of saving it. Once the windows is open, press any key to exit, Ctrl-C to copy the image and Ctrl-S to save it manually.");
             
         parser.parse_args_or_exit();
     }
@@ -146,14 +144,16 @@ fn main() -> Result<(), Box<dyn error::Error>>{
     println!("Input path: {input_path:?}");
     
     // let mut output_paths: Vec<String> = vec![];
+    if !output_paths.is_empty() && output_paths.len() != zoom_vec.len() {
+        return Err(format!("Mismatch between the number of output paths (={:?}) and the number of zoom values (={:?})", output_paths.len(), zoom_vec.len()).into())
+    }
     
-    
-    for (i, &fov_int) in fov_vec.iter().enumerate() {
+    for (i, &zoom_int) in zoom_vec.iter().enumerate() {
         match output_paths.get(i) {
             Some(_) => (),
             None => {
                 let (base_path, extenstion) = input_path.rsplit_once('.').ok_or(format!("Input file {input_path:?}"))?;
-                let out_path = format!("{base_path}_preproc_z{fov_int}.{extenstion}");
+                let out_path = format!("{base_path}_preproc_z{zoom_int}.{extenstion}");
                 println!("Output path was not specified so image will be written to {out_path}");
                 output_paths.push(out_path);
                 ()
@@ -181,13 +181,13 @@ fn main() -> Result<(), Box<dyn error::Error>>{
     aruco_detector.detect_markers(&gray_image, &mut markers_coor, &mut marker_ids, &mut rejected_img_points)?;
     println!("Markers found: {:?}", marker_ids);
     
-    for (fov_int, out_path) in fov_vec.iter().zip(output_paths.iter()) {
+    for (zoom_int, out_path) in zoom_vec.iter().zip(output_paths.iter()) {
 
-        let fov = num::FromPrimitive::from_u32(fov_int.to_owned()).ok_or(format!("Input fov must be in [0, 1, 2], input was : {fov_int:?}"))?;
+        let zoom = num::FromPrimitive::from_u32(zoom_int.to_owned()).ok_or(format!("Input zoom must be in [0, 1, 2], input was : {zoom_int:?}"))?;
         
         if markers_coor.len() == 4 {
             // println!("{:?}", markers_coor);
-            let ordered_points = parse_markers(&markers_coor, &marker_ids, &fov)?;
+            let ordered_points = parse_markers(&markers_coor, &marker_ids, &zoom)?;
     
             // let ordered_points = parse(&marker_points, &marker_ids);
             println!("Points used from marker 0 to 3: {:?}", ordered_points);
