@@ -8,5 +8,4 @@ edition = "2021"
 [dependencies]
 # apriltag = "0.4.0"
 argparse = "0.2.2"
-opencv = { version = "0.84.4", features = ["aruco"] }
-# opencv = "0.84.4"
+opencv = "0.84.4"
