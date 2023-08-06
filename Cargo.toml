@@ -1,0 +1,12 @@
+[package]
+name = "idmybee"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# apriltag = "0.4.0"
+argparse = "0.2.2"
+opencv = { version = "0.84.4", features = ["aruco"] }
+# opencv = "0.84.4"
