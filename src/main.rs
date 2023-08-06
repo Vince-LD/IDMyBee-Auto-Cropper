@@ -10,7 +10,6 @@ use opencv::{
     objdetect::*,
     types::VectorOfPoint2f,
 };
-use opencv;
 use std::error;
 
 fn parse_markers(points: &Vector<VectorOfPoint2f>, marker_ids : &Vector<i32>) -> Result<VectorOfPoint2f, opencv::Error> {
@@ -18,7 +17,7 @@ fn parse_markers(points: &Vector<VectorOfPoint2f>, marker_ids : &Vector<i32>) ->
 
     let mut reordered_points: VectorOfPoint2f = VectorOfPoint2f::from_elem(Point2f::new(0., 0.), 4);
     for (i, new_idx) in marker_ids.iter().enumerate() { 
-        let point_vec = points.get(i as usize)?;
+        let point_vec = points.get(i)?;
         let point = point_vec.get(new_idx as usize)?;
         reordered_points.set(new_idx as usize, point)?;
     }
