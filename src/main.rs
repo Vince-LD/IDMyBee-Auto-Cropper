@@ -114,7 +114,7 @@ fn main() -> Result<()>{
         
         parser.refer(&mut output_paths)
             .add_option(&["-o", "--img_out"], List,
-            "Output preprocessed image path.  /!\\ The number of output files given must be 0 or the same as the number of zoom levels. If None given, the default output file will follow this pattern: '[input_folder]/[base input filename]_preproc_z[zoom level].[input file extension]'");
+            "Output preprocessed image path.  /!\\ The number of output files given must be 0 or the same as the number of zoom levels. If not given, the default output file(s) will follow the pattern: '[input_folder]/[base input filename]_preproc_z[zoom level].[input file extension]'");
 
         parser.refer(&mut out_dim)
             .add_option(&["-d", "--out_dim"], List,
