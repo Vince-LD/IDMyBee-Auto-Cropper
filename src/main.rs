@@ -30,22 +30,25 @@ fn parse_markers(points: &Vector<VectorOfPoint2f>, marker_ids : &Vector<i32>) ->
     Ok(reordered_points)
 }
 
-fn resize_if_larger_dims(img : &Mat, out_size : &Size) -> Result<Mat, opencv::Error> {
+fn resize_if_larger_dims(img : Mat, out_size : &Size) -> Result<Mat, opencv::Error> {
     // Resize l'image si elle est plus petite que les dimensions d'output
     let img_size = img.size()?;
     let width_ratio : f64 = ((out_size.width / img_size.width) as f64).max(1.);
     let height_ratio : f64 = ((out_size.height / img_size.height) as f64).max(1.);
 
+    if width_ratio == 1. && height_ratio == 1. {
+        return Ok(img)
+    }
     let mut resized_img = img.clone();
     println!("Original image size {:?}", img.size()?);
-    println!("Image resized by w{} h{}", width_ratio, height_ratio);
+    println!("Image resized by w{:.2} h{:.2}", width_ratio, height_ratio);
     imgproc::resize(
         &img,
         &mut resized_img,
         Size::default(),
         width_ratio, height_ratio,
         imgproc::INTER_LANCZOS4
-    ).unwrap();
+    )?;
     
     println!("Resized image size {:?}", resized_img.size()?);
     Ok(resized_img)
@@ -161,9 +164,9 @@ fn main() -> Result<()>{
     println!("Output path: {output_paths:?}");
 
     // let img = get_image(&input_path).to_rgba8();    
-    let img = imgcodecs::imread(&input_path, imgcodecs::IMREAD_UNCHANGED)?;
+    let mut img = imgcodecs::imread(&input_path, imgcodecs::IMREAD_UNCHANGED)?;
     let out_size = Size::new(out_dim[0], out_dim[1]);
-    let img = resize_if_larger_dims(&img, &out_size)?;
+    img = resize_if_larger_dims(img, &out_size)?;
     // show_image(&img);
     let mut gray_image = Mat::default();
     imgproc::cvt_color(&img, &mut gray_image, imgproc::COLOR_BGR2GRAY, 0)?;
@@ -179,14 +182,15 @@ fn main() -> Result<()>{
     aruco_detector.detect_markers(&gray_image, &mut markers_coor, &mut marker_ids, &mut rejected_img_points)?;
     println!("Markers found: {:?}", marker_ids);
     
-    for (zoom, out_path) in zoom_vec.iter().zip(output_paths.iter()) {
+    let ordered_points = parse_markers(&markers_coor, &marker_ids)?;
+    
+    if markers_coor.len() == 4 {
+        println!("Points used from marker #0 to #3: {:?}", ordered_points);
+        for (zoom, out_path) in zoom_vec.iter().zip(output_paths.iter()) {
         
-        if markers_coor.len() == 4 {
             // println!("{:?}", markers_coor);
-            let ordered_points = parse_markers(&markers_coor, &marker_ids)?;
     
             // let ordered_points = parse(&marker_points, &marker_ids);
-            println!("Points used from marker 0 to 3: {:?}", ordered_points);
     
             
             let warped_image = correct_image(&img, &ordered_points, &out_size, &zoom)?;
@@ -206,10 +210,16 @@ fn main() -> Result<()>{
     
             }
 
-        } else {
-            return Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.", markers_coor.len()))
         }
-
+        return Ok(())
+    }  else {
+        let rejected_marker_positions : VectorOfPoint2f = rejected_img_points.iter().map(
+            |p_vec| p_vec.iter().fold(
+                Point2f::default(), |sum_p, p| sum_p + p
+            ) / 4.
+        ).collect();
+        return Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nFollowing markers were rejected: {:?}\nThe image may be too blurred or there may be stray reflections on the markers.", 
+            markers_coor.len(), rejected_marker_positions
+        ))
     };
-    return Ok(())
 }
