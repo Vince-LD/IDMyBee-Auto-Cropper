@@ -122,7 +122,7 @@ fn main() -> Result<()>{
 
         parser.refer(&mut zoom_vec)
             .add_option(&["-z", "--zoom"], List,
-            "The zoom to apply. Multiple values can be used. Float numbers can be used. Default is 1.");
+            "The zoom to apply (can be float numbers). Multiple values can be used. Default is 1.");
         
         parser.refer(&mut show)
             .add_option(&["-s", "--show"], StoreTrue,
