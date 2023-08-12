@@ -1,101 +1,13 @@
 use argparse::{ArgumentParser, Store, StoreTrue, List };
+use anyhow::{Error, Result};
 use opencv::{
-    imgcodecs, 
-    highgui, 
-    imgproc, 
-    core::{Vector, Point2f, Mat, Size, DECOMP_LU, BORDER_CONSTANT, Scalar, Rect},
-    prelude::*, 
-    objdetect::*,
+    core::{Mat, Point2f, Rect, Vector, Size},
+    imgcodecs,
     types::VectorOfPoint2f,
 };
 
-use num_derive::FromPrimitive;
-use anyhow::{Result, Error};
-
-#[derive(FromPrimitive)]
-enum ZoomMode {
-    Large = 0,
-    Medium = 1,
-    Zoom = 2,
-}
-
-fn parse_markers(points: &Vector<VectorOfPoint2f>, marker_ids : &Vector<i32>) -> Result<VectorOfPoint2f, opencv::Error> {
-    // Crée un nouveau vecteur réorganisé en suivant les indices du vecteur marker_ids
-
-    let mut reordered_points: VectorOfPoint2f = VectorOfPoint2f::from_elem(Point2f::new(0., 0.), 4);
-    for (i, new_idx) in marker_ids.iter().enumerate() { 
-        let point = points.get(i)?.get(new_idx as usize)?;        
-        reordered_points.set(new_idx as usize, point)?;
-    }
-    Ok(reordered_points)
-}
-
-fn resize_if_larger_dims(img : Mat, out_size : &Size) -> Result<Mat, opencv::Error> {
-    // Resize l'image si elle est plus petite que les dimensions d'output
-    let img_size = img.size()?;
-    let width_ratio : f64 = ((out_size.width / img_size.width) as f64).max(1.);
-    let height_ratio : f64 = ((out_size.height / img_size.height) as f64).max(1.);
-
-    if width_ratio == 1. && height_ratio == 1. {
-        return Ok(img)
-    }
-    let mut resized_img = img.clone();
-    println!("Original image size {:?}", img.size()?);
-    println!("Image resized by w{:.2} h{:.2}", width_ratio, height_ratio);
-    imgproc::resize(
-        &img,
-        &mut resized_img,
-        Size::default(),
-        width_ratio, height_ratio,
-        imgproc::INTER_LANCZOS4
-    )?;
-    
-    println!("Resized image size {:?}", resized_img.size()?);
-    Ok(resized_img)
-}
-
-fn correct_image(img : &Mat, points : &VectorOfPoint2f, out_size: &Size, zoom: &f32) -> Result<Mat, opencv::Error> {
-
-    let h = out_size.height as f32;
-    let w = out_size.width as f32;
-    let top_y = -0.5 * h * (zoom - 1.);
-    let bot_y = h + 0.5 * h * (zoom - 1.);
-    let right_x = w * zoom;
-
-    let target_points: VectorOfPoint2f = Vector::from_slice(
-        &[
-            Point2f::new(0.0, top_y),
-            Point2f::new(right_x, top_y),
-            Point2f::new(right_x, bot_y),
-            Point2f::new(0.0, bot_y),
-        ]
-    );
-
-    // Obtenir la matrice de transformation en perspective
-    let perspective_transform = imgproc::get_perspective_transform(&points, &target_points, DECOMP_LU)?; 
-
-    // Créer une nouvelle matrice pour stocker l'image transformée
-    let mut transformed_image = Mat::default();
-
-    // Appliquer la transformation en perspective à l'image
-    imgproc::warp_perspective(
-        &img,
-        &mut transformed_image,
-        &perspective_transform,
-        img.size()?,
-        imgproc::INTER_LANCZOS4,
-        BORDER_CONSTANT,
-        Scalar::default(),
-    )?;
-
-    Ok(transformed_image)
-}
-
-fn show_image(image : &Mat) -> Result<(), opencv::Error> {
-    highgui::imshow("Preprocess image", image)?;
-    highgui::wait_key(0)?;
-    Ok(())
-}
+mod marker_utils;
+use marker_utils::marker_processing::*;
 
 fn main() -> Result<()>{
     // let mut verbose = false;
@@ -136,7 +48,6 @@ fn main() -> Result<()>{
 
     println!("Input path: {input_path:?}");
     
-    // let mut output_paths: Vec<String> = vec![];
     if !output_paths.is_empty() && output_paths.len() != zoom_vec.len() {
         return Err(
             anyhow::anyhow!(
@@ -153,11 +64,10 @@ fn main() -> Result<()>{
             None => {
                 let (base_path, extenstion) = input_path.rsplit_once('.').ok_or(format!("Input file {input_path:?}")).map_err(Error::msg)?;
 
-                let out_path = format!("{base_path}_preproc_z{:.2}.{extenstion}", zoom).replacen(".", "-", 1);
+                let out_path = format!("{base_path}_preproc_z{:.2}.{extenstion}", zoom).replacen('.', "-", 1);
                 println!("{base_path}_preproc_z{:.3}.{extenstion}", zoom);
                 println!("Output path was not specified so image will be written to {out_path}");
                 output_paths.push(out_path);
-                ()
             }
         }
     };
@@ -168,21 +78,9 @@ fn main() -> Result<()>{
     let out_size = Size::new(out_dim[0], out_dim[1]);
     img = resize_if_larger_dims(img, &out_size)?;
     // show_image(&img);
-    let mut gray_image = Mat::default();
-    imgproc::cvt_color(&img, &mut gray_image, imgproc::COLOR_BGR2GRAY, 0)?;
-    // show_image(&gray_image);
-    let aruco_detector = ArucoDetector::new(  
-        &get_predefined_dictionary(PredefinedDictionaryType::DICT_4X4_50)?,
-        &DetectorParameters::default().unwrap(),
-        RefineParameters::new(10., 3., true).unwrap(),
-    ).unwrap();
-    let mut markers_coor : Vector<VectorOfPoint2f> = Vector::new();
-    let mut marker_ids: Vector<i32> = Vector::new();
-    let mut rejected_img_points: Vector<VectorOfPoint2f> = Vector::new();
-    aruco_detector.detect_markers(&gray_image, &mut markers_coor, &mut marker_ids, &mut rejected_img_points)?;
-    println!("Markers found: {:?}", marker_ids);
-    
-    let ordered_points = parse_markers(&markers_coor, &marker_ids)?;
+
+    let (markers_coor, markers_id, rejected_markers) = get_image_markers(&img)?;
+    let ordered_points = parse_markers(&markers_coor, &markers_id)?;
     
     if markers_coor.len() == 4 {
         println!("Points used from marker #0 to #3: {:?}", ordered_points);
@@ -190,10 +88,10 @@ fn main() -> Result<()>{
         
             // println!("{:?}", markers_coor);
     
-            // let ordered_points = parse(&marker_points, &marker_ids);
+            // let ordered_points = parse(&marker_points, &markers_id);
     
             
-            let warped_image = correct_image(&img, &ordered_points, &out_size, &zoom)?;
+            let warped_image = correct_image(&img, &ordered_points, &out_size, zoom)?;
 
             let final_image = Mat::roi(&warped_image, Rect {
                 x: 0,
@@ -206,14 +104,12 @@ fn main() -> Result<()>{
                 show_image(&final_image)?;
             } else {
                 println!("Saving image to {:?}", out_path);
-                imgcodecs::imwrite(&out_path, &final_image, &Vector::new())?;
+                imgcodecs::imwrite(out_path, &final_image, &Vector::new())?;
     
             }
-
         }
-        return Ok(())
     }  else {
-        let rejected_marker_positions : VectorOfPoint2f = rejected_img_points.iter().map(
+        let rejected_marker_positions : VectorOfPoint2f = rejected_markers.iter().map(
             |p_vec| p_vec.iter().fold(
                 Point2f::default(), |sum_p, p| sum_p + p
             ) / 4.
@@ -222,4 +118,6 @@ fn main() -> Result<()>{
             markers_coor.len(), rejected_marker_positions
         ))
     };
+
+    Ok(())
 }
