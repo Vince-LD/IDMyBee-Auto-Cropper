@@ -54,11 +54,11 @@ impl IdMyBeeApp<'_> {
     }
 
     fn load_image_from_path(&mut self, img_path: &str) -> Result<ColorImage> {
-        let rgba_cv_img: Mat = imgcodecs::imread(img_path, imgcodecs::IMREAD_UNCHANGED)?;
-        let mut brga_cv_img = Mat::default();
-        cvt_color(&rgba_cv_img, &mut brga_cv_img, COLOR_BGR2RGB, 0).unwrap();
-        self.cv_orig_image = Some(brga_cv_img.clone());
-        let dyn_img: DynamicImage = brga_cv_img.try_into_cv().unwrap();
+        let brga_cv_img: Mat = imgcodecs::imread(img_path, imgcodecs::IMREAD_UNCHANGED)?;
+        let mut rgba_cv_img = Mat::default();
+        cvt_color(&brga_cv_img, &mut rgba_cv_img, COLOR_BGR2RGB, 0).unwrap();
+        self.cv_orig_image = Some(rgba_cv_img.clone());
+        let dyn_img: DynamicImage = rgba_cv_img.try_into_cv().unwrap();
         let img_buff = dyn_img.to_rgba8();
         // let img_buff: ImageBuffer<Rgba<u8>, u8> = cv_img.try_into_cv().unwrap();
         let size = [dyn_img.width() as _, dyn_img.height() as _];
