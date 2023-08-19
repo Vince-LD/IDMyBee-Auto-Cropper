@@ -114,7 +114,7 @@ fn main() -> Result<()>{
                 Point2f::default(), |sum_p, p| sum_p + p
             ) / 4.
         ).collect();
-        return Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nFollowing markers were rejected: {:?}\nThe image may be too blurred or there may be stray reflections on the markers.", 
+        return Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nFollowing markers were rejected: {:?}\nThe image may be too blurred (i.e. not enough contrast at markers positions) or there may be stray reflections on the markers (makers not black and white). Also check that markers 0 to 4 are present on the picture.", 
             markers_coor.len(), rejected_marker_positions
         ))
     };
