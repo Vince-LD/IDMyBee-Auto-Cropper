@@ -75,34 +75,32 @@ impl IdMyBeeApp {
         cvt_color(&brg_cv_img, &mut rgb_cv_img, COLOR_BGR2RGB, 0)?;
         self.cv_orig_image = Some(rgb_cv_img);
 
-        match IdMyBeeApp::cv_img_to_egui_img(&self.cv_orig_image, "Original Image") {
-            Ok(img) => {
-                self.egui_orig_image = Some(img);
-                self.load_img_res = Ok(())
-            }
-            Err(err) => {
-                self.egui_orig_image = None;
-                self.load_img_res = Err(err);
-            }
-        }
-
-        self.load_img_res = Ok(());
+        self.load_img_res = IdMyBeeApp::cv_img_to_egui_img(
+            &self.cv_orig_image,
+            "Original Image",
+            &mut self.egui_orig_image,
+        );
         Ok(())
     }
 
-    fn cv_img_to_egui_img(cv_img: &Option<Mat>, image_id: &str) -> Result<RetainedImage> {
+    fn cv_img_to_egui_img(
+        cv_img: &Option<Mat>,
+        image_id: &str,
+        dst: &mut Option<RetainedImage>,
+    ) -> Result<()> {
         if let Some(cv_img) = cv_img {
             let dyn_img: DynamicImage = cv_img.try_into_cv()?;
             let img_buff = dyn_img.to_rgba8();
             let size = [dyn_img.width() as _, dyn_img.height() as _];
             let pixels = img_buff.into_flat_samples();
             let color_img = ColorImage::from_rgba_unmultiplied(size, pixels.as_slice());
-            return Ok(RetainedImage::from_color_image(image_id, color_img));
+            *dst = Some(RetainedImage::from_color_image(image_id, color_img));
+            return Ok(());
         }
         Err(anyhow::anyhow!("No opened image was found"))
     }
 
-    fn process_image(&mut self) -> Result<Mat> {
+    fn process_image(&mut self) -> Result<()> {
         if let Some(img) = self.cv_orig_image.as_ref() {
             let out_size = Size::new(self.out_x, self.out_y);
             let img = resize_if_larger_dims(img.to_owned(), &out_size)?;
@@ -125,7 +123,13 @@ impl IdMyBeeApp {
             )
             .unwrap();
             self.crop_img_res = Ok(());
-            return Ok(final_image);
+            self.cv_cropped_image = Some(final_image);
+            return IdMyBeeApp::cv_img_to_egui_img(
+                &self.cv_cropped_image,
+                "Cropped Image",
+                &mut self.egui_cropped_image,
+            );
+        
         }
         let err_str = "No image was previously loaded. Try to press the 'Load Image' button.";
         // self.crop_img_res = Err(anyhow::anyhow!(err_str));
@@ -197,22 +201,13 @@ impl App for IdMyBeeApp {
                 ui.label("Commands");
                 ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
                 if ui.add(Button::new("Process Image")).clicked() && self.cv_orig_image.is_some() {
-                    self.cv_cropped_image = match self.process_image() {
-                        Ok(cv_img) => {
-                            let opt_cv_img = Some(cv_img);
-                            (self.egui_cropped_image, self.crop_img_res) =
-                                match IdMyBeeApp::cv_img_to_egui_img(&opt_cv_img, "Cropped Image") {
-                                    Ok(img) => (Some(img), Ok(())),
-                                    Err(err) => (None, Err(err)),
-                                };
-                            opt_cv_img
+                    self.crop_img_res = match self.process_image() {
+                        Ok(()) => Ok(()),
+                        Err(err) => {
+                            IdMyBeeApp::display_error(ui, &err);
+                            Err(err)
                         }
-                        Err(error) => {
-                            IdMyBeeApp::display_error(ui, &error);
-                            self.crop_img_res = Err(error);
-                            None
-                        }
-                    }
+                    };
                 }
                 ui.allocate_space(ui.available_size());
             });
@@ -248,26 +243,18 @@ impl App for IdMyBeeApp {
             ui.allocate_space(ui.available_size());
         });
 
-        egui::TopBottomPanel::bottom("Shortcuts").show(ctx, |_| {
+        egui::TopBottomPanel::bottom("Shortcuts").show(ctx, |ui| {
             if ctx.input(|i| i.key_pressed(Key::V)) && self.img_path.is_some() {
                 self.load_img_res = self.load_image_from_path(&self.img_path.clone().unwrap());
             }
             if ctx.input(|i| i.key_pressed(Key::Space)) {
-                self.cv_cropped_image = match self.process_image() {
-                    Ok(cv_img) => {
-                        let opt_cv_img = Some(cv_img);
-                        (self.egui_cropped_image, self.crop_img_res) =
-                            match IdMyBeeApp::cv_img_to_egui_img(&opt_cv_img, "Cropped Image") {
-                                Ok(img) => (Some(img), Ok(())),
-                                Err(err) => (None, Err(err)),
-                            };
-                        opt_cv_img
+                self.crop_img_res = match self.process_image() {
+                    Ok(()) => Ok(()),
+                    Err(err) => {
+                        IdMyBeeApp::display_error(ui, &err);
+                        Err(err)
                     }
-                    Err(error) => {
-                        self.crop_img_res = Err(error);
-                        None
-                    }
-                }
+                };
             }
             if ctx.input(|i| i.key_pressed(Key::D)) {
                 self.zoom += 0.1;
