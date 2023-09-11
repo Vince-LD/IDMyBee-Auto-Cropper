@@ -1,16 +1,16 @@
 use anyhow::{Error, Result};
-use egui::{Button, Color32, Ui};
+use egui::{Button, Color32, ScrollArea, Ui};
 use std::fs::{self, DirEntry};
 use std::path::PathBuf;
 
 pub struct FileExplorer {
-    current_dir: PathBuf,
-    selected_file: PathBuf,
+    pub current_dir: PathBuf,
+    pub selected_file: PathBuf,
     dir_vec: Vec<PathBuf>,
     file_vec: Vec<PathBuf>,
     dirnames: Vec<String>,
     filenames: Vec<String>,
-    err: Result<()>,
+    pub err: Result<()>,
 }
 
 impl FileExplorer {
@@ -24,7 +24,7 @@ impl FileExplorer {
             filenames: Vec::new(),
             err: Ok(()),
         };
-        fe.update_paths();
+        fe.err = fe.update_paths();
         fe
     }
 
@@ -88,39 +88,37 @@ impl FileExplorer {
 
     pub fn ui(&mut self, ui: &mut Ui) {
         // Affichez le chemin actuel en tant qu'en-tête.
-        ui.horizontal(|ui| {
-            ui.label("Current Path:");
-            ui.monospace(self.current_dir.display().to_string());
-        });
-        ui.horizontal(|ui| {
-            if ui.button("<<<").clicked() {
-                self.current_dir.pop();
-                self.err = self.update_paths();
-            };
-            if ui.button("Update").clicked() {
-                self.err = self.update_paths();
-            };
-        });
-        if let Err(err) = self.err.as_ref() {
-            ui.colored_label(Color32::YELLOW, err.to_string());
-        }
+        ScrollArea::vertical().show(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Current Path:");
+                ui.monospace(self.current_dir.display().to_string());
+            });
+            ui.horizontal(|ui| {
+                if ui.button("<<<").clicked() {
+                    self.current_dir.pop();
+                    self.err = self.update_paths();
+                };
+                if ui.button("Update").clicked() {
+                    self.err = self.update_paths();
+                };
+            });
 
-        let mut should_update = false;
-        for (dirname, dir_path) in self.dirnames.iter().zip(self.dir_vec.iter()) {
-            if ui.button(dirname).clicked() {
-                self.current_dir = dir_path.clone();
-                should_update = true;
-            };
-        }
-        if should_update {
-            _ = self.update_paths();
-        }
+            let mut should_update = false;
+            for (dirname, dir_path) in self.dirnames.iter().zip(self.dir_vec.iter()) {
+                if ui.button(dirname).clicked() {
+                    self.current_dir = dir_path.clone();
+                    should_update = true;
+                };
+            }
+            if should_update {
+                self.err = self.update_paths();
+            }
 
-        for (filename, file_path) in self.filenames.iter().zip(self.file_vec.iter()) {
-            if ui.selectable_label(false, filename).clicked() {
-                self.selected_file = file_path.clone();
-            };
-        }
-        ui.colored_label(Color32::LIGHT_BLUE, self.get_filename());
+            for (filename, file_path) in self.filenames.iter().zip(self.file_vec.iter()) {
+                if ui.selectable_label(false, filename).clicked() {
+                    self.selected_file = file_path.clone();
+                };
+            }
+        });
     }
 }
