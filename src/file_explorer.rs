@@ -1,5 +1,6 @@
+use anyhow::{Error, Result};
 use egui::{Button, Color32, Ui};
-use std::fs;
+use std::fs::{self, DirEntry};
 use std::path::PathBuf;
 
 pub struct FileExplorer {
@@ -9,6 +10,7 @@ pub struct FileExplorer {
     file_vec: Vec<PathBuf>,
     dirnames: Vec<String>,
     filenames: Vec<String>,
+    err: Result<()>,
 }
 
 impl FileExplorer {
@@ -20,45 +22,45 @@ impl FileExplorer {
             file_vec: Vec::new(),
             dirnames: Vec::new(),
             filenames: Vec::new(),
+            err: Ok(()),
         };
         fe.update_paths();
         fe
     }
 
-    pub fn update_paths(&mut self) {
+    pub fn update_paths(&mut self) -> Result<()> {
+        let dir_content = std::fs::read_dir(&self.current_dir)?
+            .filter_map(|dir| dir.ok())
+            .collect::<Vec<DirEntry>>()
+            .iter()
+            .map(|dir| dir.path())
+            .collect::<Vec<PathBuf>>();
+
         self.dir_vec.clear();
         self.file_vec.clear();
         self.filenames.clear();
         self.dirnames.clear();
 
-        let dir_content = std::fs::read_dir(&self.current_dir)
-            .unwrap()
-            .map(|dir| dir.unwrap().path())
-            .collect::<Vec<PathBuf>>();
-
         for path in dir_content.into_iter() {
             match path {
                 _ if path.is_dir() => {
                     self.dir_vec.push(path.clone());
-                    let dirname = path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    self.dirnames.push(dirname);
+                    if let Some(dirname) = path.file_name() {
+                        let str_dirname = dirname.to_string_lossy().to_string();
+                        self.dirnames.push(str_dirname);
+                    }
                 }
                 _ if path.is_file() => {
                     self.file_vec.push(path.clone());
-                    let filename = path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    self.filenames.push(filename);
+                    if let Some(filename) = path.file_name() {
+                        let str_filename = filename.to_string_lossy().to_string();
+                        self.filenames.push(str_filename);
+                    }
                 }
                 _ => (),
             }
         }
+        Ok(())
     }
 
     pub fn get_filename(&self) -> String {
@@ -91,14 +93,17 @@ impl FileExplorer {
             ui.monospace(self.current_dir.display().to_string());
         });
         ui.horizontal(|ui| {
-            FileExplorer::add_dir_ui(ui, "<<< Previous", 1., || {
+            if ui.button("<<<").clicked() {
                 self.current_dir.pop();
-                self.update_paths();
-            });
-            FileExplorer::add_dir_ui(ui, "Update", 1., || {
-                self.update_paths();
-            });
+                self.err = self.update_paths();
+            };
+            if ui.button("Update").clicked() {
+                self.err = self.update_paths();
+            };
         });
+        if let Err(err) = self.err.as_ref() {
+            ui.colored_label(Color32::YELLOW, err.to_string());
+        }
 
         let mut should_update = false;
         for (dirname, dir_path) in self.dirnames.iter().zip(self.dir_vec.iter()) {
@@ -108,7 +113,7 @@ impl FileExplorer {
             };
         }
         if should_update {
-            self.update_paths();
+            _ = self.update_paths();
         }
 
         for (filename, file_path) in self.filenames.iter().zip(self.file_vec.iter()) {
