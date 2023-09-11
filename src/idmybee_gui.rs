@@ -1,7 +1,7 @@
 use eframe::{run_native, App, NativeOptions};
 use egui::Context;
-mod explorer;
-use explorer::FileExplorer;
+mod file_explorer;
+use file_explorer::FileExplorer;
 
 struct MainState {
     explorer: FileExplorer,
@@ -9,8 +9,8 @@ struct MainState {
 
 impl App for MainState {
     fn update(&mut self, ctx: &Context, _: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |mut ui| {
-            self.explorer.ui(&mut ui);
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.explorer.ui(ui);
         });
     }
 }
