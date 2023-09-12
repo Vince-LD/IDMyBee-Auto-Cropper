@@ -5,7 +5,8 @@ use std::path::PathBuf;
 
 pub struct FileExplorer {
     pub current_dir: PathBuf,
-    pub selected_file: PathBuf,
+    pub selected_file: Option<PathBuf>,
+    pub selected_file_index: Option<usize>,
     dir_vec: Vec<PathBuf>,
     file_vec: Vec<PathBuf>,
     dirnames: Vec<String>,
@@ -17,7 +18,8 @@ impl FileExplorer {
     pub fn new(_: &eframe::CreationContext) -> Self {
         let mut fe = Self {
             current_dir: std::env::current_dir().unwrap(),
-            selected_file: std::path::PathBuf::new(),
+            selected_file: None,
+            selected_file_index: None,
             dir_vec: Vec::new(),
             file_vec: Vec::new(),
             dirnames: Vec::new(),
@@ -63,12 +65,14 @@ impl FileExplorer {
         Ok(())
     }
 
-    pub fn get_filename(&self) -> String {
-        self.selected_file
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string()
+    pub fn get_filename(&self) -> Option<String> {
+        // Si Some alors on transforme en Some(str) sinon on renvoie None
+        self.selected_file.as_ref().map(|path| {
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+        })
     }
 
     pub fn add_dir_ui<G>(ui: &mut Ui, label: &str, r_size: f32, f: G)
@@ -88,21 +92,21 @@ impl FileExplorer {
 
     pub fn ui(&mut self, ui: &mut Ui) {
         // Affichez le chemin actuel en tant qu'en-tête.
+        ui.horizontal(|ui| {
+            ui.label("Current Path:");
+            ui.colored_label(Color32::LIGHT_BLUE, self.current_dir.display().to_string());
+        });
+        ui.horizontal(|ui| {
+            if ui.button("Previous").clicked() {
+                self.current_dir.pop();
+                self.err = self.update_paths();
+            };
+            if ui.button("Update").clicked() {
+                self.err = self.update_paths();
+            };
+        });
+        ui.separator();
         ScrollArea::vertical().show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Current Path:");
-                ui.monospace(self.current_dir.display().to_string());
-            });
-            ui.horizontal(|ui| {
-                if ui.button("<<<").clicked() {
-                    self.current_dir.pop();
-                    self.err = self.update_paths();
-                };
-                if ui.button("Update").clicked() {
-                    self.err = self.update_paths();
-                };
-            });
-
             let mut should_update = false;
             for (dirname, dir_path) in self.dirnames.iter().zip(self.dir_vec.iter()) {
                 if ui.button(dirname).clicked() {
@@ -114,9 +118,14 @@ impl FileExplorer {
                 self.err = self.update_paths();
             }
 
-            for (filename, file_path) in self.filenames.iter().zip(self.file_vec.iter()) {
-                if ui.selectable_label(false, filename).clicked() {
-                    self.selected_file = file_path.clone();
+            for (i, (filename, file_path)) in
+                self.filenames.iter().zip(self.file_vec.iter()).enumerate()
+            {
+                let is_colored =
+                    self.selected_file_index.is_some() && self.selected_file_index.unwrap() == i;
+                if ui.selectable_label(is_colored, filename).clicked() {
+                    self.selected_file = Some(file_path.clone());
+                    self.selected_file_index = Some(i);
                 };
             }
         });

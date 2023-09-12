@@ -13,7 +13,6 @@ impl App for MainState {
             if let Err(err) = self.explorer.err.as_ref() {
                 ui.colored_label(Color32::YELLOW, err.to_string());
             }
-            ui.colored_label(Color32::LIGHT_BLUE, self.explorer.get_filename());
         });
         egui::CentralPanel::default().show(ctx, |ui| {
             self.explorer.ui(ui);
