@@ -64,6 +64,23 @@ impl IdMyBeeApp<'_> {
         }
     }
 
+    fn clear_orig_images(&mut self) {
+        self.cv_orig_image = None;
+        self.egui_orig_image = None;
+        self.crop_img_res = Ok(());
+    }
+
+    fn clear_cropped_images(&mut self) {
+        self.cv_cropped_image = None;
+        self.egui_cropped_image = None;
+        self.crop_img_res = Ok(());
+    }
+
+    fn clear_all_images(&mut self) {
+        self.clear_orig_images();
+        self.clear_cropped_images();
+    }
+
     fn load_image_from_path(&mut self, img_path: &str) {
         self.try_load = true;
         let load_img_res = imgcodecs::imread(img_path, imgcodecs::IMREAD_UNCHANGED);
@@ -75,10 +92,7 @@ impl IdMyBeeApp<'_> {
             }
             Err(err) => {
                 self.load_img_res = Err(err.into());
-                self.cv_orig_image = None;
-                self.egui_orig_image = None;
-                self.cv_cropped_image = None;
-                self.egui_cropped_image = None;
+                self.clear_all_images();
                 return;
             }
         };
@@ -91,10 +105,7 @@ impl IdMyBeeApp<'_> {
             }
             Err(err) => {
                 self.load_img_res = Err(err.into());
-                self.cv_orig_image = None;
-                self.egui_orig_image = None;
-                self.cv_cropped_image = None;
-                self.egui_cropped_image = None;
+                self.clear_all_images();
                 return;
             }
         };
@@ -109,10 +120,7 @@ impl IdMyBeeApp<'_> {
             }
             Err(err) => {
                 self.load_img_res = Err(err);
-                self.cv_orig_image = None;
-                self.egui_orig_image = None;
-                self.cv_cropped_image = None;
-                self.egui_cropped_image = None;
+                self.clear_all_images();
                 return;
             }
         };
@@ -122,6 +130,8 @@ impl IdMyBeeApp<'_> {
             "Original Image",
             &mut self.egui_orig_image,
         );
+
+        self.clear_cropped_images();
     }
 
     fn load_image_from_explorer(&mut self) {
@@ -275,12 +285,16 @@ impl App for IdMyBeeApp<'_> {
                 self.explorer.previous_file();
                 if self.explorer.selected_file.is_some() {
                     self.load_image_from_explorer();
+                } else {
+                    self.clear_all_images();
                 }
             };
             if ctx.input(|i| i.key_pressed(Key::S)) {
                 self.explorer.next_file();
                 if self.explorer.selected_file.is_some() {
                     self.load_image_from_explorer();
+                } else {
+                    self.clear_all_images();
                 }
             };
         });
