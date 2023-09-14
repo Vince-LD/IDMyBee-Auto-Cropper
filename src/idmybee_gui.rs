@@ -279,10 +279,16 @@ impl IdMyBeeApp<'_> {
     }
 
     fn integer_edit_field(ui: &mut egui::Ui, value: &mut u32, max_size: Vec2) -> egui::Response {
-        let mut str_value = format!("{}", value);
+        let mut str_value = match value {
+            0 => String::new(),
+            _ => format!("{}", value),
+        };
+
         let res = ui.add_sized(max_size, TextEdit::singleline(&mut str_value));
-        if let Ok(result) = str_value.parse() {
+        if let Ok(result) = str_value.trim().parse() {
             *value = result;
+        } else {
+            *value = 0;
         }
         res
     }
@@ -375,14 +381,14 @@ impl App for IdMyBeeApp<'_> {
                 ui.separator();
                 ui.separator();
                 if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_x, Vec2::new(40., 15.))
-                    .changed()
+                    .lost_focus()
                 {
                     self.process_image_err(ui)
                 };
                 ui.separator();
                 // ui.add_space(7.);
                 if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_y, Vec2::new(40., 15.))
-                    .changed()
+                    .lost_focus()
                 {
                     self.process_image_err(ui)
                 };
