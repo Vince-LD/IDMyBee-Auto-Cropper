@@ -23,6 +23,8 @@ num = "0.4.1"
 num-derive = "0.4.0"
 num-traits = "0.2.16"
 opencv = "0.83.0"
+rfd = "0.12.0"
+same-file = "1.0.6"
 
 [[bin]]
 name = "idmybee_cli"

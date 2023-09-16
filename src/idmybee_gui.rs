@@ -1,14 +1,17 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
+
 use anyhow::{Error, Result};
 use cv_convert::TryIntoCv;
-use eframe::{egui, run_native, App, Frame, NativeOptions};
-use egui::{Button, Color32, ColorImage, Key, Label, RichText, TextEdit, Vec2};
+use eframe::{egui, run_native, App, NativeOptions};
+use egui::{Button, Color32, ColorImage, Key, Label, RichText, ScrollArea, TextEdit, Vec2};
 use egui_extras::RetainedImage;
 use image::DynamicImage;
 use opencv::{
-    core::{Mat, Rect, Size},
+    core::{Mat, Rect, Size, Vector},
     imgcodecs,
-    imgproc::{cvt_color, COLOR_BGR2RGB},
+    imgproc::{cvt_color, COLOR_BGR2RGB, COLOR_RGB2BGR},
 };
+use rfd::FileDialog;
 mod marker_utils;
 use marker_utils::marker_processing::*;
 
@@ -17,7 +20,8 @@ use file_explorer::FileExplorer;
 
 fn main() {
     let window_options = NativeOptions {
-        drag_and_drop_support: true,
+        initial_window_size: Option::from(Vec2::new(1100., 700.)),
+
         ..Default::default()
     };
     run_native(
@@ -40,6 +44,7 @@ struct IdMyBeeApp<'a> {
     try_load: bool,
     load_img_res: Result<()>,
     crop_img_res: Result<()>,
+    save_img_res: Result<()>,
 }
 
 impl IdMyBeeApp<'_> {
@@ -61,6 +66,7 @@ impl IdMyBeeApp<'_> {
             try_load: false,
             load_img_res: Ok(()),
             crop_img_res: Ok(()),
+            save_img_res: Ok(()),
         }
     }
 
@@ -68,12 +74,14 @@ impl IdMyBeeApp<'_> {
         self.cv_orig_image = None;
         self.egui_orig_image = None;
         self.crop_img_res = Ok(());
+        self.save_img_res = Ok(());
     }
 
     fn clear_cropped_images(&mut self) {
         self.cv_cropped_image = None;
         self.egui_cropped_image = None;
         self.crop_img_res = Ok(());
+        self.save_img_res = Ok(());
     }
 
     fn clear_all_images(&mut self) {
@@ -213,6 +221,36 @@ impl IdMyBeeApp<'_> {
         }
     }
 
+    fn save_cropped_image(&mut self) {
+        if self.cv_cropped_image.is_some() {
+            let mut out_full_path = self.explorer.output_img_dir.clone();
+            out_full_path.push(&self.explorer.output_img_name);
+
+            let mut rgb_img = Mat::default();
+            match cvt_color(
+                &self.cv_cropped_image.as_ref().unwrap(),
+                &mut rgb_img,
+                COLOR_RGB2BGR,
+                0,
+            ) {
+                Ok(_) => self.save_img_res = Ok(()),
+                Err(err) => self.save_img_res = Err(err.into()),
+            }
+
+            match imgcodecs::imwrite(&out_full_path.to_string_lossy(), &rgb_img, &Vector::new()) {
+                Ok(_) => {
+                    self.crop_img_res = Ok(());
+                    self.explorer.update_paths();
+                    self.save_img_res = Ok(());
+                }
+                Err(err) => {
+                    println!("Error: {}", err);
+                    self.save_img_res = Err(err.into())
+                }
+            }
+        }
+    }
+
     fn display_shortcuts(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
             ui.set_min_height(30.);
@@ -272,7 +310,29 @@ impl IdMyBeeApp<'_> {
                 ui.label("Crop image");
                 ui.add_space(10.);
                 if ui.input(|i| i.key_pressed(Key::Space)) {
-                    self.process_image_err(ui)
+                    self.process_image_err(ui);
+                    self.explorer.output_img_name = self.explorer.get_default_output_filename();
+                }
+
+                ui.add(Label::new(
+                    RichText::new("F").color(Color32::LIGHT_BLUE).underline(),
+                ));
+                ui.label("Selected output folder");
+                ui.add_space(10.);
+                if ui.input(|i| i.key_pressed(Key::F)) {
+                    if let Some(path) = FileDialog::new().pick_folder() {
+                        // self.current_dir = Some(path.display().to_string());
+                        self.explorer.output_img_dir = path;
+                    };
+                }
+
+                ui.add(Label::new(
+                    RichText::new("R").color(Color32::LIGHT_BLUE).underline(),
+                ));
+                ui.label("Save cropped image");
+                ui.add_space(10.);
+                if ui.input(|i| i.key_pressed(Key::R)) {
+                    self.save_cropped_image();
                 }
             });
         });
@@ -292,6 +352,47 @@ impl IdMyBeeApp<'_> {
         }
         res
     }
+
+    fn cropped_image_ui(&mut self, ui: &mut egui::Ui) {
+        ui.vertical_centered(|ui| {
+            ui.add_sized(
+                Vec2::new(ui.available_width(), 25.),
+                Label::new(RichText::new("Cropped image").heading()),
+            );
+        });
+        ui.separator();
+
+        if let Some(img) = self.egui_cropped_image.as_ref() {
+            img.show_max_size(ui, ui.available_size());
+            ui.separator();
+        } else if self.egui_cropped_image.is_none() && self.crop_img_res.is_err() {
+            IdMyBeeApp::display_error(ui, self.crop_img_res.as_ref().unwrap_err());
+        }
+    }
+
+    fn crop_param_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal_wrapped(|ui| {
+            ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
+            ui.separator();
+            ui.separator();
+            if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_x, Vec2::new(40., 15.))
+                .lost_focus()
+            {
+                self.process_image_err(ui)
+            };
+            ui.separator();
+            // ui.add_space(7.);
+            if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_y, Vec2::new(40., 15.))
+                .lost_focus()
+            {
+                self.process_image_err(ui)
+            };
+            // ui.add_space(30.);
+        });
+        // ui.label(format!("Zoom : {:.1}", self.zoom));
+
+        ui.separator();
+    }
 }
 
 impl App for IdMyBeeApp<'_> {
@@ -301,6 +402,7 @@ impl App for IdMyBeeApp<'_> {
         egui::TopBottomPanel::bottom("Shortcuts").show(ctx, |ui| self.display_shortcuts(ui));
 
         egui::SidePanel::left("Files")
+            .default_width(300.)
             .resizable(true)
             .show(ctx, |ui| {
                 if self.explorer.file_list_ui(ui) {
@@ -309,97 +411,53 @@ impl App for IdMyBeeApp<'_> {
                 ui.allocate_space(ui.available_size());
             });
 
-        // egui::TopBottomPanel::bottom("Commands")
-        //     .resizable(true)
-        //     .show(ctx, |ui| {
-        //         ui.heading("Commands");
-        //         ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
-        //         if ui.add(Button::new("Process Image")).clicked() && self.cv_orig_image.is_some() {
-        //             self.crop_img_res = match self.process_image() {
-        //                 Ok(()) => Ok(()),
-        //                 Err(err) => {
-        //                     IdMyBeeApp::display_error(ui, &err);
-        //                     Err(err)
-        //                 }
-        //             };
-        //         }
-        //         ui.allocate_space(ui.available_size());
-        //     });
         egui::SidePanel::left("Image")
+            .default_width(400.)
             .resizable(true)
             .show(ctx, |ui| {
-                ui.vertical_centered(|ui| {
-                    ui.set_min_height(25.);
-                    ui.heading("Original Image");
+                ScrollArea::vertical().show(ui, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_sized(
+                            Vec2::new(ui.available_width(), 30.),
+                            Label::new(RichText::new("Original image").heading()),
+                        );
+                    });
+                    if let Some(img) = self.egui_orig_image.as_ref() {
+                        img.show_max_size(ui, ui.available_size());
+                    } else if self.try_load
+                        && self.egui_orig_image.is_none()
+                        && self.load_img_res.is_err()
+                    {
+                        IdMyBeeApp::display_error(ui, self.load_img_res.as_ref().unwrap_err());
+                    }
+
+                    ui.separator();
+                    self.crop_param_ui(ui);
+                    if ui
+                        .add_sized(
+                            Vec2::new(ui.available_width(), 20.),
+                            Button::new("Process Image"),
+                        )
+                        .clicked()
+                        && self.cv_orig_image.is_some()
+                    {
+                        self.process_image_err(ui)
+                    }
+                    ui.allocate_space(ui.available_size());
                 });
-                if let Some(img) = self.egui_orig_image.as_ref() {
-                    img.show_max_size(ui, ui.available_size());
-                } else if self.try_load
-                    && self.egui_orig_image.is_none()
-                    && self.load_img_res.is_err()
-                {
-                    IdMyBeeApp::display_error(ui, self.load_img_res.as_ref().unwrap_err());
-                }
-
-                ui.separator();
-                if ui
-                    .add_sized(
-                        Vec2::new(ui.available_width(), 20.),
-                        Button::new("Process Image"),
-                    )
-                    .clicked()
-                    && self.cv_orig_image.is_some()
-                {
-                    self.process_image_err(ui)
-                }
-                ui.allocate_space(ui.available_size());
             });
 
-        // let central_panel =
-        //     egui::CentralPanel::default().frame(egui::Frame::none().inner_margin(5.));
-        let central_panel = egui::CentralPanel::default();
-        // .show(ctx, |ui| {
-        // egui::SidePanel::left("Cropped Image").se
-        // .resizable(true)
-        central_panel.show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.set_max_height(25.);
-                ui.heading("Cropped Image");
-            });
-            ui.separator();
-
-            if let Some(img) = self.egui_cropped_image.as_ref() {
-                img.show_max_size(ui, ui.available_size());
-                ui.separator();
-            } else if self.egui_cropped_image.is_none() && self.crop_img_res.is_err() {
-                IdMyBeeApp::display_error(ui, self.crop_img_res.as_ref().unwrap_err());
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.cropped_image_ui(ui);
+            if self
+                .explorer
+                .img_saving_ui(ui, self.egui_cropped_image.is_some())
+            {
+                self.save_cropped_image();
+            };
+            if let Err(err) = self.save_img_res.as_ref() {
+                IdMyBeeApp::display_error(ui, err);
             }
-
-            // ui.label(format!("Dimensions : {}x{}p", self.out_x, self.out_y));
-            ui.horizontal_wrapped(|ui| {
-                ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
-                ui.separator();
-                ui.separator();
-                if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_x, Vec2::new(40., 15.))
-                    .lost_focus()
-                {
-                    self.process_image_err(ui)
-                };
-                ui.separator();
-                // ui.add_space(7.);
-                if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_y, Vec2::new(40., 15.))
-                    .lost_focus()
-                {
-                    self.process_image_err(ui)
-                };
-                // ui.add_space(30.);
-            });
-            // ui.label(format!("Zoom : {:.1}", self.zoom));
-
-            ui.separator();
-
-            // ui.label(format!("Input : {}", &self.img_path.clone().unwrap()));
-            // ui.separator();
             ui.allocate_space(ui.available_size());
         });
 

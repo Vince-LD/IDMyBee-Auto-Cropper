@@ -1,17 +1,19 @@
 use anyhow::Result;
 
-use egui::{Button, Color32, Label, RichText, ScrollArea, Ui};
+use egui::{Color32, Label, RichText, ScrollArea, SelectableLabel, Ui, Vec2};
+use rfd::FileDialog;
+use same_file::is_same_file;
 use std::cmp::min;
-use std::ffi::OsStr;
-use std::fs::{self, DirEntry};
-use std::path::PathBuf;
-use std::rc::Rc;
+use std::fs::DirEntry;
+use std::path::{Path, PathBuf};
 
 pub struct FileExplorer<'a> {
     pub current_dir: PathBuf,
     pub split_current_dir: Vec<String>,
     pub selected_file: Option<PathBuf>,
     pub selected_file_index: Option<usize>,
+    pub output_img_name: String,
+    pub output_img_dir: PathBuf,
     dir_vec: Vec<PathBuf>,
     file_vec: Vec<PathBuf>,
     dirnames: Vec<String>,
@@ -27,6 +29,8 @@ impl FileExplorer<'_> {
             split_current_dir: Vec::new(),
             selected_file: None,
             selected_file_index: None,
+            output_img_name: String::new(),
+            output_img_dir: PathBuf::new(),
             dir_vec: Vec::new(),
             file_vec: Vec::new(),
             dirnames: Vec::new(),
@@ -68,17 +72,22 @@ impl FileExplorer<'_> {
                         self.dirnames.push(str_dirname);
                     }
                 }
-                _ if path.is_file() && imghdr::from_file(&path).is_ok() => {
+                _ if path.is_file() && self.is_file_valid_image_ext(&path) => {
                     if let Some(filename) = path.file_name() {
                         println!("{:?} is a picture", filename);
                         self.file_vec.push(path.clone());
                         let str_filename = filename.to_string_lossy().to_string();
                         self.filenames.push(str_filename);
-                        //  self.allowed_extensions.contains(&filename.to_str().unwrap_or("")) {
                     }
                 }
                 _ => (),
             }
+        }
+        if let Some(path) = self.selected_file.as_ref() {
+            self.selected_file_index = self
+                .file_vec
+                .iter()
+                .position(|r| is_same_file(r, path).unwrap_or(false));
         }
         self.err = Ok(())
     }
@@ -91,6 +100,17 @@ impl FileExplorer<'_> {
                 .to_string_lossy()
                 .to_string()
         })
+    }
+
+    fn is_file_valid_image_ext(&self, img_path: &Path) -> bool {
+        self.allowed_extensions.contains(
+            &img_path
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string()
+                .as_ref(),
+        )
     }
 
     pub fn get_filepath(&self) -> Option<String> {
@@ -162,11 +182,13 @@ impl FileExplorer<'_> {
         ui.horizontal_wrapped(|ui| {
             ui.set_min_height(30.);
             ui.horizontal_centered(|ui| {
-                if ui.button("Open").clicked() {
-                    self.current_dir.pop();
-                    self.split_current_dir.pop();
-                    self.update_paths();
+                if ui.button("Select folder").clicked() {
+                    if let Some(path) = FileDialog::new().pick_folder() {
+                        // self.current_dir = Some(path.display().to_string());
+                        self.change_dir(&path)
+                    };
                 };
+
                 if ui.button("Update").clicked() {
                     self.update_paths();
                 };
@@ -200,21 +222,33 @@ impl FileExplorer<'_> {
     pub fn file_list_ui(&mut self, ui: &mut Ui) -> bool {
         // Affichez le chemin actuel en tant qu'en-tête.
         let mut is_file_clicked = false;
+        let available_width = ui.available_width();
+        let title_size = Vec2::new(available_width, 30.);
+        let elem_size = Vec2::new(available_width, 20.);
 
         ScrollArea::vertical().show(ui, |ui| {
             ui.horizontal(|ui| {
-                ui.set_min_height(25.);
-                ui.heading("Directories");
+                ui.add_sized(
+                    title_size,
+                    Label::new(RichText::new("Directories").heading()),
+                );
             });
             ui.separator();
-            if ui.button("../").clicked() {
+            if ui
+                .add_sized(elem_size, SelectableLabel::new(false, "../"))
+                .clicked()
+            {
                 self.current_dir.pop();
                 self.split_current_dir.pop();
                 self.update_paths();
             };
             // let mut is_dir_clicked = false;
             for (dirname, dir_path) in self.dirnames.iter().zip(self.dir_vec.iter()) {
-                if ui.button(dirname).clicked() {
+                if ui
+                    .add_sized(elem_size, SelectableLabel::new(false, dirname))
+                    .clicked()
+                {
+                    self.output_img_dir = dir_path.clone();
                     self.change_dir(&dir_path.clone());
                     return;
                 };
@@ -222,8 +256,7 @@ impl FileExplorer<'_> {
 
             ui.separator();
             ui.horizontal(|ui| {
-                ui.set_min_height(25.);
-                ui.heading("Files");
+                ui.add_sized(title_size, Label::new(RichText::new("Images").heading()));
             });
             ui.separator();
 
@@ -232,13 +265,73 @@ impl FileExplorer<'_> {
             {
                 let is_colored =
                     self.selected_file_index.is_some() && self.selected_file_index.unwrap() == i;
-                if ui.selectable_label(is_colored, filename).clicked() {
+                if ui
+                    .add_sized(elem_size, SelectableLabel::new(is_colored, filename))
+                    .clicked()
+                {
                     self.selected_file = Some(file_path.clone());
                     self.selected_file_index = Some(i);
                     is_file_clicked = true;
+                    self.output_img_name = self.get_default_output_filename();
                 };
             }
         });
         is_file_clicked
+    }
+
+    pub fn get_default_output_filename(&self) -> String {
+        let mut out_filename = String::new();
+        if let Some(filename) = self.selected_file.as_ref() {
+            let ext = filename
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            out_filename.push_str(&filename.file_stem().unwrap_or_default().to_string_lossy());
+            out_filename.push_str("_crop.");
+            out_filename.push_str(&ext);
+        }
+        out_filename
+    }
+
+    pub fn img_saving_ui(&mut self, ui: &mut egui::Ui, is_visible: bool) -> bool {
+        // let mut tmp_out = self.output_img_path.clone();
+        // ui.horizontal_wrapped(|ui| {
+        //     if ui.text_edit_singleline(&mut tmp_out).lost_focus() {
+        //         let mut tmp_out_path = PathBuf::from(tmp_out);
+        //         if let Some(parent_dir) = tmp_out_path.parent() {
+        //             if parent_dir.is_dir() && self.is_file_valid_image_ext(&tmp_out_path) {
+        //                 self.output_img_path.clear();
+        //                 self.output_img_path.push_str(&tmp_out_path.)
+        //             }
+        //         }
+        //     }
+        // });
+        let mut must_save = false;
+        ui.add_visible_ui(is_visible, |ui| {
+            ui.vertical(|ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Output directory:").underline());
+                    ui.label(self.output_img_dir.to_string_lossy().to_string());
+                    if ui.button("Select").clicked() {
+                        if let Some(path) = FileDialog::new().pick_folder() {
+                            self.output_img_dir = path
+                        }
+                    }
+                });
+                ui.separator();
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("Image file name:").underline());
+                    ui.text_edit_singleline(&mut self.output_img_name);
+                    if ui.button("Save").clicked() {
+                        let mut out_full_path = self.output_img_dir.clone();
+                        out_full_path.push(&self.output_img_name);
+                        ui.label(RichText::new(format!("Saved {:?}", out_full_path)));
+                        must_save = true;
+                    }
+                });
+            });
+        });
+        must_save
     }
 }
