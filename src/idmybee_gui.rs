@@ -421,29 +421,25 @@ impl App for IdMyBeeApp<'_> {
                             Vec2::new(ui.available_width(), 30.),
                             Label::new(RichText::new("Original image").heading()),
                         );
+                        ui.separator();
                     });
                     if let Some(img) = self.egui_orig_image.as_ref() {
                         img.show_max_size(ui, ui.available_size());
+                        ui.vertical_centered(|ui| {
+                            ui.separator();
+                            self.crop_param_ui(ui);
+                            if ui.button("Process Image").clicked() && self.cv_orig_image.is_some()
+                            {
+                                self.process_image_err(ui)
+                            }
+                            ui.allocate_space(ui.available_size());
+                        });
                     } else if self.try_load
                         && self.egui_orig_image.is_none()
                         && self.load_img_res.is_err()
                     {
                         IdMyBeeApp::display_error(ui, self.load_img_res.as_ref().unwrap_err());
                     }
-
-                    ui.separator();
-                    self.crop_param_ui(ui);
-                    if ui
-                        .add_sized(
-                            Vec2::new(ui.available_width(), 20.),
-                            Button::new("Process Image"),
-                        )
-                        .clicked()
-                        && self.cv_orig_image.is_some()
-                    {
-                        self.process_image_err(ui)
-                    }
-                    ui.allocate_space(ui.available_size());
                 });
             });
 

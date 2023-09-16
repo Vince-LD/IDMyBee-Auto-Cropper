@@ -222,11 +222,11 @@ impl FileExplorer<'_> {
     pub fn file_list_ui(&mut self, ui: &mut Ui) -> bool {
         // Affichez le chemin actuel en tant qu'en-tête.
         let mut is_file_clicked = false;
-        let available_width = ui.available_width();
-        let title_size = Vec2::new(available_width, 30.);
-        let elem_size = Vec2::new(available_width, 20.);
 
         ScrollArea::vertical().show(ui, |ui| {
+            let available_width = ui.available_width();
+            let title_size = Vec2::new(available_width, 30.);
+            let elem_size = Vec2::new(available_width, 20.);
             ui.horizontal(|ui| {
                 ui.add_sized(
                     title_size,
