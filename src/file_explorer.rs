@@ -42,7 +42,9 @@ impl FileExplorer<'_> {
             err: Ok(()),
         };
         fe.change_dir(&fe.current_dir.clone());
-        // fe.set_split_current_dir();
+        // if let Some(path) = FileDialog::new().pick_folder() {
+        //     fe.change_dir(&path);
+        // }
         fe
     }
 
@@ -93,16 +95,6 @@ impl FileExplorer<'_> {
                 .position(|r| is_same_file(r, path).unwrap_or(false));
         }
         self.err = Ok(())
-    }
-
-    pub fn get_filename(&self) -> Option<String> {
-        // Si Some alors on transforme en Some(str) sinon on renvoie None
-        self.selected_file.as_ref().map(|path| {
-            path.file_name()
-                .unwrap_or_default()
-                .to_string_lossy()
-                .to_string()
-        })
     }
 
     fn is_file_valid_image_ext(&self, img_path: &Path) -> bool {
