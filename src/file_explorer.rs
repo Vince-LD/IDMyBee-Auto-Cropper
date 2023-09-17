@@ -1,6 +1,8 @@
 use anyhow::Result;
 
-use egui::{Color32, Label, RichText, ScrollArea, SelectableLabel, Ui, Vec2};
+use egui::{
+    Button, Color32, Label, RichText, ScrollArea, SelectableLabel, Style, TextStyle, Ui, Vec2,
+};
 use rfd::FileDialog;
 use same_file::is_same_file;
 use std::cmp::min;
@@ -226,7 +228,11 @@ impl FileExplorer<'_> {
             ui.horizontal(|ui| {
                 ui.add_sized(
                     title_size,
-                    Label::new(RichText::new("Directories").heading()),
+                    Label::new(
+                        RichText::new("Directories")
+                            .heading()
+                            .color(Color32::LIGHT_BLUE),
+                    ),
                 );
             });
             ui.separator();
@@ -251,7 +257,10 @@ impl FileExplorer<'_> {
 
             ui.separator();
             ui.horizontal(|ui| {
-                ui.add_sized(title_size, Label::new(RichText::new("Images").heading()));
+                ui.add_sized(
+                    title_size,
+                    Label::new(RichText::new("Images").heading().color(Color32::LIGHT_BLUE)),
+                );
             });
             ui.separator();
 
@@ -305,10 +314,8 @@ impl FileExplorer<'_> {
         let mut must_save = false;
         ui.add_visible_ui(is_visible, |ui| {
             ui.vertical(|ui| {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Output directory:").underline());
-                    ui.label(self.output_img_dir.to_string_lossy().to_string());
-                    if ui.button("Select").clicked() {
+                ui.horizontal(|ui| {
+                    if ui.button("Select out directory").clicked() {
                         if let Some(path) = FileDialog::new()
                             .set_directory(&self.output_img_dir)
                             .pick_folder()
@@ -316,10 +323,28 @@ impl FileExplorer<'_> {
                             self.output_img_dir = path
                         }
                     }
+                    ui.separator();
+                    ui.add(
+                        Label::new(self.output_img_dir.to_string_lossy().to_string()).wrap(true),
+                    );
+                    // ui.label(RichText::new("Output directory:").underline());
+                    // if ui
+                    //     .link(self.output_img_dir.to_string_lossy().to_string())
+                    //     .clicked()
+                    // {
+                    //     if let Some(path) = FileDialog::new()
+                    //         .set_directory(&self.output_img_dir)
+                    //         .pick_folder()
+                    //     {
+                    //         self.output_img_dir = path;
+                    //     }
+                    // };
                 });
                 ui.separator();
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(RichText::new("Image file name:").underline());
+                    // let label_style = Style::default().text_style(TextStyle::Button);
+                    ui.add(Label::new(RichText::new("Image file name")));
+                    ui.separator();
                     ui.text_edit_singleline(&mut self.output_img_name);
                     if ui.button("Save").clicked() {
                         let mut out_full_path = self.output_img_dir.clone();

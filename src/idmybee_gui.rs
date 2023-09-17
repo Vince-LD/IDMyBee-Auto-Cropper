@@ -176,7 +176,7 @@ impl IdMyBeeApp<'_> {
                 ));
             }
             let warped_image = correct_image(&img, &ordered_points, &out_size, &self.zoom)?;
-            let final_image = Mat::roi(
+            let final_image = match Mat::roi(
                 &warped_image,
                 Rect {
                     x: 0,
@@ -184,9 +184,18 @@ impl IdMyBeeApp<'_> {
                     width: out_size.width,
                     height: out_size.height,
                 },
-            )
-            .unwrap();
-            self.crop_img_res = Ok(());
+            ) {
+                Ok(img) => {
+                    self.crop_img_res = Ok(());
+                    img
+                }
+                Err(err) => {
+                    let err_str = err.to_string();
+                    self.crop_img_res = Err(err.into());
+                    return Err(anyhow::anyhow!(err_str));
+                }
+            };
+
             self.cv_cropped_image = Some(final_image);
             return IdMyBeeApp::cv_img_to_egui_img(
                 &self.cv_cropped_image,
@@ -371,7 +380,11 @@ impl IdMyBeeApp<'_> {
         ui.vertical_centered(|ui| {
             ui.add_sized(
                 Vec2::new(ui.available_width(), 25.),
-                Label::new(RichText::new("Cropped image").heading()),
+                Label::new(
+                    RichText::new("Cropped image")
+                        .heading()
+                        .color(Color32::LIGHT_BLUE),
+                ),
             );
         });
         ui.separator();
@@ -436,7 +449,11 @@ impl App for IdMyBeeApp<'_> {
                     ui.vertical_centered(|ui| {
                         ui.add_sized(
                             Vec2::new(ui.available_width(), 30.),
-                            Label::new(RichText::new("Original image").heading()),
+                            Label::new(
+                                RichText::new("Original image")
+                                    .heading()
+                                    .color(Color32::LIGHT_BLUE),
+                            ),
                         );
                         ui.separator();
                     });
