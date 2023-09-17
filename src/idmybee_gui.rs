@@ -164,18 +164,42 @@ impl IdMyBeeApp<'_> {
         Err(anyhow::anyhow!("No opened image was found"))
     }
 
-    fn process_image(&mut self) -> Result<()> {
+    fn process_image(&mut self) {
         if let Some(img) = self.cv_orig_image.as_ref() {
             let out_size = Size::new(self.out_x as i32, self.out_y as i32);
-            let img = resize_if_larger_dims(img.to_owned(), &out_size)?;
-            let (markers_coor, markers_id, _) = get_image_markers(&img)?;
-            let ordered_points = parse_markers(&markers_coor, &markers_id)?;
+            let img = match resize_if_larger_dims(img.to_owned(), &out_size) {
+                Ok(img) => img,
+                Err(err) => {
+                    self.crop_img_res = Err(err.into());
+                    return;
+                }
+            };
+            let (markers_coor, markers_id) = match get_image_markers(&img) {
+                Ok((coor, ids, _)) => (coor, ids),
+                Err(err) => {
+                    self.crop_img_res = Err(err.into());
+                    return;
+                }
+            };
+            let ordered_points = match parse_markers(&markers_coor, &markers_id) {
+                Ok(points) => points,
+                Err(err) => {
+                    self.crop_img_res = Err(err.into());
+                    return;
+                }
+            };
             if markers_coor.len() != 4 {
-                return Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nThe image may be too blurred (i.e. not enough contrast at markers positions) or there may be stray reflections on the markers (makers not black and white). Also check that markers 0 to 4 are present on the picture.", 
+                self.crop_img_res=  Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nThe image may be too blurred (i.e. not enough contrast at markers positions) or there may be stray reflections on the markers (makers not black and white). Also check that markers 0 to 4 are present on the picture.", 
                     markers_coor.len()
                 ));
             }
-            let warped_image = correct_image(&img, &ordered_points, &out_size, &self.zoom)?;
+            let warped_image = match correct_image(&img, &ordered_points, &out_size, &self.zoom) {
+                Ok(img) => img,
+                Err(err) => {
+                    self.crop_img_res = Err(err.into());
+                    return;
+                }
+            };
             let final_image = match Mat::roi(
                 &warped_image,
                 Rect {
@@ -190,31 +214,26 @@ impl IdMyBeeApp<'_> {
                     img
                 }
                 Err(err) => {
-                    let err_str = err.to_string();
                     self.crop_img_res = Err(err.into());
-                    return Err(anyhow::anyhow!(err_str));
+                    return;
                 }
             };
 
             self.cv_cropped_image = Some(final_image);
-            return IdMyBeeApp::cv_img_to_egui_img(
+            self.crop_img_res = IdMyBeeApp::cv_img_to_egui_img(
                 &self.cv_cropped_image,
                 "Cropped Image",
                 &mut self.egui_cropped_image,
             );
         }
         let err_str = "No image was previously loaded. Select an image with the explorer in the left panel and then crop it.";
-        // self.crop_img_res = Err(anyhow::anyhow!(err_str));
-        Err(anyhow::anyhow!(err_str))
+        self.crop_img_res = Err(anyhow::anyhow!(err_str));
     }
 
     fn process_image_err(&mut self, ui: &mut egui::Ui) {
-        self.crop_img_res = match self.process_image() {
-            Ok(()) => Ok(()),
-            Err(err) => {
-                IdMyBeeApp::display_error(ui, &err);
-                Err(err)
-            }
+        self.process_image();
+        if let Err(err) = self.crop_img_res.as_ref() {
+            IdMyBeeApp::display_error(ui, err);
         };
     }
 
