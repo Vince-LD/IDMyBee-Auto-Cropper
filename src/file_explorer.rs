@@ -35,7 +35,10 @@ impl FileExplorer<'_> {
             file_vec: Vec::new(),
             dirnames: Vec::new(),
             filenames: Vec::new(),
-            allowed_extensions: vec!["png", "jpg", "jpeg", "tiff"],
+            allowed_extensions: vec![
+                "bmp", "dib", "jpeg", "jpg", "jpe", "jp2", "png", "webp", "avif", "pbm", "pgm",
+                "ppm", "pxm", "pnm", "pfm", "sr", "ras", "tiff", "tif", "exr", "hdr", "pic",
+            ],
             err: Ok(()),
         };
         fe.change_dir(&fe.current_dir.clone());
@@ -173,6 +176,7 @@ impl FileExplorer<'_> {
 
     pub fn change_dir(&mut self, new_dir: &PathBuf) {
         self.current_dir = dunce::canonicalize(new_dir).unwrap_or_default();
+        self.output_img_dir = new_dir.clone();
         println!("{:?}", self.current_dir.to_str());
         self.set_split_current_dir();
         self.update_paths();
@@ -248,7 +252,6 @@ impl FileExplorer<'_> {
                     .add_sized(elem_size, SelectableLabel::new(false, dirname))
                     .clicked()
                 {
-                    self.output_img_dir = dir_path.clone();
                     self.change_dir(&dir_path.clone());
                     return;
                 };
@@ -314,7 +317,10 @@ impl FileExplorer<'_> {
                     ui.label(RichText::new("Output directory:").underline());
                     ui.label(self.output_img_dir.to_string_lossy().to_string());
                     if ui.button("Select").clicked() {
-                        if let Some(path) = FileDialog::new().pick_folder() {
+                        if let Some(path) = FileDialog::new()
+                            .set_directory(&self.output_img_dir)
+                            .pick_folder()
+                        {
                             self.output_img_dir = path
                         }
                     }

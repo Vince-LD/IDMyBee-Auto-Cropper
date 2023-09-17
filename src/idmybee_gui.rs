@@ -327,6 +327,18 @@ impl IdMyBeeApp<'_> {
                 }
 
                 ui.add(Label::new(
+                    RichText::new("V").color(Color32::LIGHT_BLUE).underline(),
+                ));
+                ui.label("Selected output folder");
+                ui.add_space(10.);
+                if ui.input(|i| i.key_pressed(Key::V)) {
+                    if let Some(path) = FileDialog::new().pick_folder() {
+                        // self.current_dir = Some(path.display().to_string());
+                        self.explorer.change_dir(&path)
+                    };
+                }
+
+                ui.add(Label::new(
                     RichText::new("R").color(Color32::LIGHT_BLUE).underline(),
                 ));
                 ui.label("Save cropped image");
@@ -372,7 +384,10 @@ impl IdMyBeeApp<'_> {
 
     fn crop_param_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
+            let slider = ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
+            if slider.drag_released() || slider.lost_focus() && slider.changed() {
+                self.process_image_err(ui);
+            };
             ui.separator();
             ui.separator();
             if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_x, Vec2::new(40., 15.))
