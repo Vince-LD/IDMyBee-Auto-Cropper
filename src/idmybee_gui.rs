@@ -195,7 +195,7 @@ impl IdMyBeeApp<'_> {
                 &mut self.egui_cropped_image,
             );
         }
-        let err_str = "No image was previously loaded. Try to press the 'Load Image' button.";
+        let err_str = "No image was previously loaded. Select an image with the explorer in the left panel and then crop it.";
         // self.crop_img_res = Err(anyhow::anyhow!(err_str));
         Err(anyhow::anyhow!(err_str))
     }
