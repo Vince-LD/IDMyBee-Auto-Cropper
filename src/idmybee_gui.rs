@@ -413,7 +413,6 @@ impl IdMyBeeApp<'_> {
             // ui.add_space(30.);
         });
         // ui.label(format!("Zoom : {:.1}", self.zoom));
-
         ui.separator();
     }
 }
@@ -449,25 +448,24 @@ impl App for IdMyBeeApp<'_> {
                             ),
                         );
                         ui.separator();
-                    });
-                    if let Some(img) = self.egui_orig_image.as_ref() {
-                        img.show_max_size(ui, ui.available_size());
-                        ui.vertical_centered(|ui| {
+                        if let Some(img) = self.egui_orig_image.as_ref() {
+                            img.show_max_size(ui, ui.available_size());
+
                             ui.separator();
                             self.crop_param_ui(ui);
                             if ui.button("Process Image").clicked() && self.cv_orig_image.is_some()
                             {
                                 self.process_image_wrapper(ui)
                             }
-                        });
-                    } else if self.try_load
-                        && self.egui_orig_image.is_none()
-                        && self.load_img_res.is_err()
-                    {
-                        IdMyBeeApp::display_error(ui, self.load_img_res.as_ref().unwrap_err());
-                    }
+                        } else if self.try_load
+                            && self.egui_orig_image.is_none()
+                            && self.load_img_res.is_err()
+                        {
+                            IdMyBeeApp::display_error(ui, self.load_img_res.as_ref().unwrap_err());
+                        }
+                    });
+                    ui.allocate_space(ui.available_size());
                 });
-                ui.allocate_space(ui.available_size());
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
