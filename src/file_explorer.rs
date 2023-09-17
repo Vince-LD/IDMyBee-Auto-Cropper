@@ -1,8 +1,6 @@
 use anyhow::Result;
 
-use egui::{
-    Button, Color32, Label, RichText, ScrollArea, SelectableLabel, Style, TextStyle, Ui, Vec2,
-};
+use egui::{Color32, Label, RichText, ScrollArea, SelectableLabel, Ui, Vec2};
 use rfd::FileDialog;
 use same_file::is_same_file;
 use std::cmp::min;
@@ -299,18 +297,6 @@ impl FileExplorer<'_> {
     }
 
     pub fn img_saving_ui(&mut self, ui: &mut egui::Ui, is_visible: bool) -> bool {
-        // let mut tmp_out = self.output_img_path.clone();
-        // ui.horizontal_wrapped(|ui| {
-        //     if ui.text_edit_singleline(&mut tmp_out).lost_focus() {
-        //         let mut tmp_out_path = PathBuf::from(tmp_out);
-        //         if let Some(parent_dir) = tmp_out_path.parent() {
-        //             if parent_dir.is_dir() && self.is_file_valid_image_ext(&tmp_out_path) {
-        //                 self.output_img_path.clear();
-        //                 self.output_img_path.push_str(&tmp_out_path.)
-        //             }
-        //         }
-        //     }
-        // });
         let mut must_save = false;
         ui.add_visible_ui(is_visible, |ui| {
             ui.vertical(|ui| {
@@ -327,26 +313,22 @@ impl FileExplorer<'_> {
                     ui.add(
                         Label::new(self.output_img_dir.to_string_lossy().to_string()).wrap(true),
                     );
-                    // ui.label(RichText::new("Output directory:").underline());
-                    // if ui
-                    //     .link(self.output_img_dir.to_string_lossy().to_string())
-                    //     .clicked()
-                    // {
-                    //     if let Some(path) = FileDialog::new()
-                    //         .set_directory(&self.output_img_dir)
-                    //         .pick_folder()
-                    //     {
-                    //         self.output_img_dir = path;
-                    //     }
-                    // };
                 });
                 ui.separator();
-                ui.horizontal_wrapped(|ui| {
+
+                ui.horizontal(|ui| {
                     // let label_style = Style::default().text_style(TextStyle::Button);
-                    ui.add(Label::new(RichText::new("Image file name")));
-                    ui.separator();
+                    // ui.add(Label::new(RichText::new("Image file name").underline()));
+                    // let available_width = ui.available_width();
+
+                    // ui.add_sized(
+                    //     Vec2::new(available_width - 70., max_height),
+                    //     TextEdit::singleline(&mut self.output_img_name),
+                    // );
                     ui.text_edit_singleline(&mut self.output_img_name);
-                    if ui.button("Save").clicked() {
+                    // let save_btn = ui.add_sized(Vec2::new(60., max_height), Button::new("Save"));
+
+                    if ui.button("  Save  ").clicked() {
                         let mut out_full_path = self.output_img_dir.clone();
                         out_full_path.push(&self.output_img_name);
                         ui.label(RichText::new(format!("Saved {:?}", out_full_path)));

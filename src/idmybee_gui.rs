@@ -164,43 +164,19 @@ impl IdMyBeeApp<'_> {
         Err(anyhow::anyhow!("No opened image was found"))
     }
 
-    fn process_image(&mut self) {
+    fn process_image(&mut self) -> Result<Mat> {
         if let Some(img) = self.cv_orig_image.as_ref() {
             let out_size = Size::new(self.out_x as i32, self.out_y as i32);
-            let img = match resize_if_larger_dims(img.to_owned(), &out_size) {
-                Ok(img) => img,
-                Err(err) => {
-                    self.crop_img_res = Err(err.into());
-                    return;
-                }
-            };
-            let (markers_coor, markers_id) = match get_image_markers(&img) {
-                Ok((coor, ids, _)) => (coor, ids),
-                Err(err) => {
-                    self.crop_img_res = Err(err.into());
-                    return;
-                }
-            };
-            let ordered_points = match parse_markers(&markers_coor, &markers_id) {
-                Ok(points) => points,
-                Err(err) => {
-                    self.crop_img_res = Err(err.into());
-                    return;
-                }
-            };
+            let img = resize_if_larger_dims(img.to_owned(), &out_size)?;
+            let (markers_coor, markers_id, _) = get_image_markers(&img)?;
             if markers_coor.len() != 4 {
-                self.crop_img_res=  Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nThe image may be too blurred (i.e. not enough contrast at markers positions) or there may be stray reflections on the markers (makers not black and white). Also check that markers 0 to 4 are present on the picture.", 
+                return Err(anyhow::anyhow!("Error: {:?} markers were found instead of 4.\nThe image may be too blurred (i.e. not enough contrast at markers positions) or there may be stray reflections on the markers (makers not black and white). Also check that markers 0 to 4 are present on the picture.", 
                     markers_coor.len()
                 ));
             }
-            let warped_image = match correct_image(&img, &ordered_points, &out_size, &self.zoom) {
-                Ok(img) => img,
-                Err(err) => {
-                    self.crop_img_res = Err(err.into());
-                    return;
-                }
-            };
-            let final_image = match Mat::roi(
+            let ordered_points = parse_markers(&markers_coor, &markers_id)?;
+            let warped_image = correct_image(&img, &ordered_points, &out_size, &self.zoom)?;
+            let final_image = Mat::roi(
                 &warped_image,
                 Rect {
                     x: 0,
@@ -208,30 +184,28 @@ impl IdMyBeeApp<'_> {
                     width: out_size.width,
                     height: out_size.height,
                 },
-            ) {
-                Ok(img) => {
-                    self.crop_img_res = Ok(());
-                    img
-                }
-                Err(err) => {
-                    self.crop_img_res = Err(err.into());
-                    return;
-                }
-            };
-
-            self.cv_cropped_image = Some(final_image);
-            self.crop_img_res = IdMyBeeApp::cv_img_to_egui_img(
-                &self.cv_cropped_image,
-                "Cropped Image",
-                &mut self.egui_cropped_image,
-            );
+            )?;
+            return Ok(final_image);
         }
         let err_str = "No image was previously loaded. Select an image with the explorer in the left panel and then crop it.";
-        self.crop_img_res = Err(anyhow::anyhow!(err_str));
+        Err(anyhow::anyhow!(err_str))
     }
 
-    fn process_image_err(&mut self, ui: &mut egui::Ui) {
-        self.process_image();
+    fn process_image_wrapper(&mut self, ui: &mut egui::Ui) {
+        match self.process_image() {
+            Ok(img) => {
+                self.cv_cropped_image = Some(img);
+                self.crop_img_res = IdMyBeeApp::cv_img_to_egui_img(
+                    &self.cv_cropped_image,
+                    "Cropped Image",
+                    &mut self.egui_cropped_image,
+                );
+            }
+            Err(err) => {
+                IdMyBeeApp::display_error(ui, &err);
+                self.crop_img_res = Err(err);
+            }
+        };
         if let Err(err) = self.crop_img_res.as_ref() {
             IdMyBeeApp::display_error(ui, err);
         };
@@ -336,7 +310,7 @@ impl IdMyBeeApp<'_> {
                     ui.label("Crop image");
                     ui.add_space(10.);
                     if ui.input(|i| i.key_pressed(Key::Space)) {
-                        self.process_image_err(ui);
+                        self.process_image_wrapper(ui);
                         self.explorer.output_img_name = self.explorer.get_default_output_filename();
                     }
 
@@ -420,21 +394,21 @@ impl IdMyBeeApp<'_> {
         ui.horizontal_wrapped(|ui| {
             let slider = ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
             if slider.drag_released() || slider.lost_focus() && slider.changed() {
-                self.process_image_err(ui);
+                self.process_image_wrapper(ui);
             };
             ui.separator();
             ui.separator();
             if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_x, Vec2::new(40., 15.))
                 .lost_focus()
             {
-                self.process_image_err(ui)
+                self.process_image_wrapper(ui)
             };
             ui.separator();
             // ui.add_space(7.);
             if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_y, Vec2::new(40., 15.))
                 .lost_focus()
             {
-                self.process_image_err(ui)
+                self.process_image_wrapper(ui)
             };
             // ui.add_space(30.);
         });
@@ -483,9 +457,8 @@ impl App for IdMyBeeApp<'_> {
                             self.crop_param_ui(ui);
                             if ui.button("Process Image").clicked() && self.cv_orig_image.is_some()
                             {
-                                self.process_image_err(ui)
+                                self.process_image_wrapper(ui)
                             }
-                            ui.allocate_space(ui.available_size());
                         });
                     } else if self.try_load
                         && self.egui_orig_image.is_none()
@@ -494,6 +467,7 @@ impl App for IdMyBeeApp<'_> {
                         IdMyBeeApp::display_error(ui, self.load_img_res.as_ref().unwrap_err());
                     }
                 });
+                ui.allocate_space(ui.available_size());
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
@@ -509,31 +483,5 @@ impl App for IdMyBeeApp<'_> {
             }
             ui.allocate_space(ui.available_size());
         });
-
-        // egui::TopBottomPanel::bottom("Commands").show(ctx, |ui| {
-        //     self.display_command_panel(ui);
-        //     if ctx.input(|i| i.key_pressed(Key::D)) {
-        //         self.zoom += 0.1;
-        //     };
-        //     if ctx.input(|i| i.key_pressed(Key::Q)) {
-        //         self.zoom -= 0.1;
-        //     }
-        //     if ctx.input(|i| i.key_pressed(Key::Z)) {
-        //         self.explorer.previous_file();
-        //         if self.explorer.selected_file.is_some() {
-        //             self.load_image_from_explorer();
-        //         } else {
-        //             self.clear_all_images();
-        //         }
-        //     };
-        //     if ctx.input(|i| i.key_pressed(Key::S)) {
-        //         self.explorer.next_file();
-        //         if self.explorer.selected_file.is_some() {
-        //             self.load_image_from_explorer();
-        //         } else {
-        //             self.clear_all_images();
-        //         }
-        //     };
-        // });
     }
 }

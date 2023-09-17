@@ -63,7 +63,6 @@ pub mod marker_processing {
         let img_size = img.size()?;
         let width_ratio: f64 = (out_size.width as f64 / img_size.width as f64).max(1.);
         let height_ratio: f64 = (out_size.height as f64 / img_size.height as f64).max(1.);
-
         if width_ratio == 1. && height_ratio == 1. {
             return Ok(img);
         }
