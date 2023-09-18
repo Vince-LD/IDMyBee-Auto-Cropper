@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use egui::{Color32, Label, RichText, ScrollArea, SelectableLabel, Ui, Vec2};
+use egui::{Color32, Label, RichText, ScrollArea, SelectableLabel, TextEdit, Ui, Vec2};
 use rfd::FileDialog;
 use same_file::is_same_file;
 use std::cmp::min;
@@ -317,23 +317,16 @@ impl FileExplorer<'_> {
                 ui.separator();
 
                 ui.horizontal(|ui| {
-                    // let label_style = Style::default().text_style(TextStyle::Button);
-                    // ui.add(Label::new(RichText::new("Image file name").underline()));
-                    // let available_width = ui.available_width();
-
-                    // ui.add_sized(
-                    //     Vec2::new(available_width - 70., max_height),
-                    //     TextEdit::singleline(&mut self.output_img_name),
-                    // );
-                    ui.text_edit_singleline(&mut self.output_img_name);
-                    // let save_btn = ui.add_sized(Vec2::new(60., max_height), Button::new("Save"));
-
-                    if ui.button("  Save  ").clicked() {
+                    if ui.button("Save image").clicked() {
                         let mut out_full_path = self.output_img_dir.clone();
                         out_full_path.push(&self.output_img_name);
                         ui.label(RichText::new(format!("Saved {:?}", out_full_path)));
                         must_save = true;
                     }
+                    ui.add_sized(
+                        ui.available_size(),
+                        TextEdit::singleline(&mut self.output_img_name),
+                    );
                 });
             });
         });
