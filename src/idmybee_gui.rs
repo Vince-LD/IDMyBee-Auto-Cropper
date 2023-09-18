@@ -191,7 +191,7 @@ impl IdMyBeeApp<'_> {
         Err(anyhow::anyhow!(err_str))
     }
 
-    fn process_image_wrapper(&mut self, ui: &mut egui::Ui) {
+    fn process_image_wrapper(&mut self) {
         match self.process_image() {
             Ok(img) => {
                 self.cv_cropped_image = Some(img);
@@ -200,14 +200,11 @@ impl IdMyBeeApp<'_> {
                     "Cropped Image",
                     &mut self.egui_cropped_image,
                 );
+                self.explorer.output_img_name = self.explorer.get_default_output_filename();
             }
             Err(err) => {
-                IdMyBeeApp::display_error(ui, &err);
                 self.crop_img_res = Err(err);
             }
-        };
-        if let Err(err) = self.crop_img_res.as_ref() {
-            IdMyBeeApp::display_error(ui, err);
         };
     }
 
@@ -248,7 +245,7 @@ impl IdMyBeeApp<'_> {
 
     fn display_shortcuts(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.set_min_height(30.);
+            ui.set_max_height(30.);
             ui.horizontal_centered(|ui| {
                 ui.heading("Shortcuts");
                 ui.add_space(20.);
@@ -310,8 +307,7 @@ impl IdMyBeeApp<'_> {
                     ui.label("Crop image");
                     ui.add_space(10.);
                     if ui.input(|i| i.key_pressed(Key::Space)) {
-                        self.process_image_wrapper(ui);
-                        self.explorer.output_img_name = self.explorer.get_default_output_filename();
+                        self.process_image_wrapper();
                     }
 
                     ui.separator();
@@ -394,21 +390,21 @@ impl IdMyBeeApp<'_> {
         ui.horizontal_wrapped(|ui| {
             let slider = ui.add(egui::Slider::new(&mut self.zoom, 1.0..=2.5).text("Zoom"));
             if slider.drag_released() || slider.lost_focus() && slider.changed() {
-                self.process_image_wrapper(ui);
+                self.process_image_wrapper();
             };
             ui.separator();
             ui.separator();
             if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_x, Vec2::new(40., 15.))
                 .lost_focus()
             {
-                self.process_image_wrapper(ui)
+                self.process_image_wrapper()
             };
             ui.separator();
             // ui.add_space(7.);
             if IdMyBeeApp::<'_>::integer_edit_field(ui, &mut self.out_y, Vec2::new(40., 15.))
                 .lost_focus()
             {
-                self.process_image_wrapper(ui)
+                self.process_image_wrapper()
             };
             // ui.add_space(30.);
         });
@@ -455,7 +451,7 @@ impl App for IdMyBeeApp<'_> {
                             self.crop_param_ui(ui);
                             if ui.button("Process Image").clicked() && self.cv_orig_image.is_some()
                             {
-                                self.process_image_wrapper(ui)
+                                self.process_image_wrapper()
                             }
                         } else if self.try_load
                             && self.egui_orig_image.is_none()
