@@ -1,6 +1,12 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
+use std::{
+    env::current_exe,
+    path::{Path, PathBuf},
+};
+
 use anyhow::{Error, Result};
+use configparser::ini::Ini;
 use cv_convert::TryIntoCv;
 use eframe::{egui, run_native, App, NativeOptions};
 use egui::{Color32, ColorImage, Key, Label, RichText, ScrollArea, TextEdit, Vec2};
@@ -12,11 +18,15 @@ use opencv::{
     imgproc::{cvt_color, COLOR_BGR2RGB, COLOR_RGB2BGR},
 };
 use rfd::FileDialog;
+
 mod marker_utils;
 use marker_utils::marker_processing::*;
 
 mod file_explorer;
 use file_explorer::FileExplorer;
+
+mod app_shortcuts;
+use app_shortcuts::AppShortcuts;
 
 fn main() {
     let window_options = NativeOptions {
@@ -44,14 +54,25 @@ struct IdMyBeeApp<'a> {
     load_img_res: Result<()>,
     crop_img_res: Result<()>,
     save_img_res: Result<()>,
+    app_shortcuts: AppShortcuts,
 }
 
 impl IdMyBeeApp<'_> {
     fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        // app.set_image(app.img_path);
-        // app.egui_orig_image = IdMyBeeApp::cv_img_to_egui_img(&app.cv_orig_image);
-        // app.cv_cropped_image = app.process_image();
-        // app.egui_cropped_image = IdMyBeeApp::cv_img_to_egui_img(&app.cv_cropped_image);
+        let mut config = Ini::new();
+        let mut config_path: PathBuf = current_exe().unwrap_or_default();
+        config_path.pop();
+        config_path.push("config.ini");
+
+        println!("Config file path: {:?}", config_path);
+        println!("Does the file exists {:?}", config_path.is_file());
+        let load_conf_result = match config.load(config_path) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(anyhow::anyhow!(err)),
+        };
+
+        println!("{:?}", config);
+
         IdMyBeeApp {
             explorer: FileExplorer::new(),
             // img_path: "C:/Users/20100/Documents/Rust/idmybee/ressources/test_cards/Photos-001/IMG_20230805_231619.jpg",
@@ -59,13 +80,23 @@ impl IdMyBeeApp<'_> {
             cv_cropped_image: None,
             egui_orig_image: None,
             egui_cropped_image: None,
-            out_x: 600,
-            out_y: 300,
-            zoom: 1.2,
-            try_load: false,
-            load_img_res: Ok(()),
+            out_x: config
+                .getint("crop_parameters", "out_x")
+                .unwrap_or(None)
+                .unwrap_or(600) as u32,
+            out_y: config
+                .getint("crop_parameters", "out_y")
+                .unwrap_or(None)
+                .unwrap_or(600) as u32,
+            zoom: config
+                .getfloat("crop_parameters", "zoom")
+                .unwrap_or(None)
+                .unwrap_or(1.2) as f32,
+            try_load: load_conf_result.is_err(),
+            load_img_res: load_conf_result,
             crop_img_res: Ok(()),
             save_img_res: Ok(()),
+            app_shortcuts: AppShortcuts::new(&config),
         }
     }
 
@@ -252,11 +283,13 @@ impl IdMyBeeApp<'_> {
                 ui.horizontal_wrapped(|ui| {
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new("S").color(Color32::LIGHT_BLUE).underline(),
+                        RichText::new(&self.app_shortcuts.next_file.1)
+                            .color(Color32::LIGHT_BLUE)
+                            .underline(),
                     ));
                     ui.label("Next file");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::Z)) {
+                    if ui.input(|i| i.key_down(self.app_shortcuts.next_file.0)) {
                         self.explorer.previous_file();
                         if self.explorer.selected_file.is_some() {
                             self.load_image_from_explorer();
@@ -267,11 +300,13 @@ impl IdMyBeeApp<'_> {
 
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new("Z").color(Color32::LIGHT_BLUE).underline(),
+                        RichText::new(&self.app_shortcuts.previous_file.1)
+                            .color(Color32::LIGHT_BLUE)
+                            .underline(),
                     ));
                     ui.label("Previous file");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::S)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.previous_file.0)) {
                         self.explorer.next_file();
                         if self.explorer.selected_file.is_some() {
                             self.load_image_from_explorer();
@@ -281,68 +316,77 @@ impl IdMyBeeApp<'_> {
                     };
 
                     ui.separator();
-                    ui.add(Label::new(RichText::new("D").color(Color32::LIGHT_BLUE)));
+                    ui.add(Label::new(
+                        RichText::new(&self.app_shortcuts.increase_zoom.1)
+                            .color(Color32::LIGHT_BLUE),
+                    ));
                     ui.label("Zoom +");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::D)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.increase_zoom.0)) {
                         self.zoom += 0.1;
                     };
 
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new("Q").color(Color32::LIGHT_BLUE).underline(),
+                        RichText::new(&self.app_shortcuts.decrease_zoom.1)
+                            .color(Color32::LIGHT_BLUE)
+                            .underline(),
                     ));
                     ui.label("Zoom -");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::Q)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.decrease_zoom.0)) {
                         self.zoom -= 0.1;
                     }
 
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new("Space")
+                        RichText::new(&self.app_shortcuts.crop_image.1)
                             .color(Color32::LIGHT_BLUE)
                             .underline(),
                     ));
                     ui.label("Crop image");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::Space)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.crop_image.0)) {
                         self.process_image_wrapper();
                     }
 
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new("F").color(Color32::LIGHT_BLUE).underline(),
+                        RichText::new(&self.app_shortcuts.select_input_dir.1)
+                            .color(Color32::LIGHT_BLUE)
+                            .underline(),
                     ));
-                    ui.label("Selected output folder");
+                    ui.label("Selected input folder");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::F)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.select_input_dir.0)) {
                         if let Some(path) = FileDialog::new().pick_folder() {
-                            // self.current_dir = Some(path.display().to_string());
-                            self.explorer.output_img_dir = path;
-                        };
-                    }
-
-                    ui.separator();
-                    ui.add(Label::new(
-                        RichText::new("V").color(Color32::LIGHT_BLUE).underline(),
-                    ));
-                    ui.label("Selected output folder");
-                    ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::V)) {
-                        if let Some(path) = FileDialog::new().pick_folder() {
-                            // self.current_dir = Some(path.display().to_string());
                             self.explorer.change_dir(&path)
                         };
                     }
 
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new("R").color(Color32::LIGHT_BLUE).underline(),
+                        RichText::new(&self.app_shortcuts.select_output_dir.1)
+                            .color(Color32::LIGHT_BLUE)
+                            .underline(),
+                    ));
+                    ui.label("Selected output folder");
+                    ui.add_space(10.);
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.previous_file.0)) {
+                        if let Some(path) = FileDialog::new().pick_folder() {
+                            self.explorer.output_img_dir = path;
+                        };
+                    }
+
+                    ui.separator();
+                    ui.add(Label::new(
+                        RichText::new(&self.app_shortcuts.save_crop_image.1)
+                            .color(Color32::LIGHT_BLUE)
+                            .underline(),
                     ));
                     ui.label("Save cropped image");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(Key::R)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.save_crop_image.0)) {
                         self.save_cropped_image();
                     }
                 });
