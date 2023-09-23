@@ -117,13 +117,13 @@ impl FileExplorer<'_> {
 
     pub fn previous_file(&mut self) {
         if !self.file_vec.is_empty() {
-            let new_index = match self.selected_file_index {
-                Some(index) => index.saturating_sub(1),
+            self.selected_file_index = Some(match self.selected_file_index {
+                Some(index) => (self.file_vec.len() - 1 + index) % self.file_vec.len(),
                 None => 0,
-            };
-            self.selected_file_index = Some(new_index);
+            });
+
             let new_selected_file = match self.selected_file {
-                Some(_) => self.file_vec[new_index].clone(),
+                Some(_) => self.file_vec[self.selected_file_index.unwrap()].clone(),
                 None => self.file_vec[0].clone(),
             };
             self.selected_file = Some(new_selected_file)
@@ -132,13 +132,12 @@ impl FileExplorer<'_> {
 
     pub fn next_file(&mut self) {
         if !self.file_vec.is_empty() {
-            let new_index = match self.selected_file_index {
-                Some(index) => min(self.file_vec.len() - 1, index + 1),
+            self.selected_file_index = Some(match self.selected_file_index {
+                Some(index) => (index + 1) % self.file_vec.len(),
                 None => 0,
-            };
-            self.selected_file_index = Some(new_index);
+            });
             let new_selected_file = match self.selected_file {
-                Some(_) => self.file_vec[new_index].clone(),
+                Some(_) => self.file_vec[self.selected_file_index.unwrap()].clone(),
                 None => self.file_vec[0].clone(),
             };
             self.selected_file = Some(new_selected_file)

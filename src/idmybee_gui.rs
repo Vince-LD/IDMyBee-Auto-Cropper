@@ -283,13 +283,13 @@ impl IdMyBeeApp<'_> {
                 ui.horizontal_wrapped(|ui| {
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new(&self.app_shortcuts.next_file.1)
+                        RichText::new(&self.app_shortcuts.previous_file.1)
                             .color(Color32::LIGHT_BLUE)
                             .underline(),
                     ));
-                    ui.label("Next file");
+                    ui.label("Previous file");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_down(self.app_shortcuts.next_file.0)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.previous_file.0)) {
                         self.explorer.previous_file();
                         if self.explorer.selected_file.is_some() {
                             self.load_image_from_explorer();
@@ -300,13 +300,13 @@ impl IdMyBeeApp<'_> {
 
                     ui.separator();
                     ui.add(Label::new(
-                        RichText::new(&self.app_shortcuts.previous_file.1)
+                        RichText::new(&self.app_shortcuts.next_file.1)
                             .color(Color32::LIGHT_BLUE)
                             .underline(),
                     ));
-                    ui.label("Previous file");
+                    ui.label("Next file");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(self.app_shortcuts.previous_file.0)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.next_file.0)) {
                         self.explorer.next_file();
                         if self.explorer.selected_file.is_some() {
                             self.load_image_from_explorer();
@@ -372,7 +372,7 @@ impl IdMyBeeApp<'_> {
                     ));
                     ui.label("Selected output folder");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(self.app_shortcuts.previous_file.0)) {
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.select_output_dir.0)) {
                         if let Some(path) = FileDialog::new().pick_folder() {
                             self.explorer.output_img_dir = path;
                         };
