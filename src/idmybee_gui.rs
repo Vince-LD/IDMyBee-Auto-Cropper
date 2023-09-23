@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 use std::{
+    cmp::max,
     env::current_exe,
     path::{Path, PathBuf},
 };
@@ -322,8 +323,10 @@ impl IdMyBeeApp<'_> {
                     ));
                     ui.label("Zoom +");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(self.app_shortcuts.increase_zoom.0)) {
-                        self.zoom += 0.1;
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.increase_zoom.0))
+                        && self.zoom < 2.5
+                    {
+                        self.zoom = f32::min(self.zoom + 0.1, 2.5);
                     };
 
                     ui.separator();
@@ -334,8 +337,10 @@ impl IdMyBeeApp<'_> {
                     ));
                     ui.label("Zoom -");
                     ui.add_space(10.);
-                    if ui.input(|i| i.key_pressed(self.app_shortcuts.decrease_zoom.0)) {
-                        self.zoom -= 0.1;
+                    if ui.input(|i| i.key_pressed(self.app_shortcuts.decrease_zoom.0))
+                        && self.zoom > 1.
+                    {
+                        self.zoom = f32::max(self.zoom - 0.1, 1.);
                     }
 
                     ui.separator();
