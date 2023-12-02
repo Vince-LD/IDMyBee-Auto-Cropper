@@ -40,7 +40,4 @@ path = "src/idmybee_cli.rs"
 name = "idmybee_gui"
 path = "src/idmybee_gui.rs"
 
-[[bin]]
-name = "test"
-path = "src/test.rs"
 
